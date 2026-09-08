@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
+import '../../widgets/google_sign_in_button.dart';
 import 'otp_screen.dart';
 import 'register_screen.dart';
 
@@ -23,6 +24,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   bool _useEmail = false;
   bool _obscurePassword = true;
   bool _isLoading = false;
+  bool _isGoogleLoading = false;
 
   @override
   void dispose() {
@@ -70,6 +72,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       _showSnack('Login failed: ${e.toString()}');
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _loginWithGoogle() async {
+    setState(() => _isGoogleLoading = true);
+    try {
+      await ref.read(authProvider.notifier).signInWithGoogle();
+      // Auth state listener handles navigation
+    } catch (e) {
+      _showSnack('Google sign-in failed: ${e.toString()}');
+    } finally {
+      if (mounted) setState(() => _isGoogleLoading = false);
     }
   }
 
@@ -305,6 +319,36 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               ).animate().fadeIn(delay: 350.ms).scale(begin: const Offset(0.95, 0.95)),
 
               const SizedBox(height: 24),
+
+              // Divider with 'or continue with'
+              Row(
+                children: [
+                  const Expanded(child: Divider(color: AppColors.divider)),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Text(
+                      'or continue with',
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: AppColors.textLight,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  const Expanded(child: Divider(color: AppColors.divider)),
+                ],
+              ).animate().fadeIn(delay: 375.ms),
+
+              const SizedBox(height: 20),
+
+              // Google Sign In Button
+              GoogleSignInButton(
+                text: 'Continue with Google',
+                isLoading: _isGoogleLoading,
+                onPressed: _isLoading || _isGoogleLoading ? null : _loginWithGoogle,
+              ).animate().fadeIn(delay: 400.ms),
+
+              const SizedBox(height: 28),
 
               // Register link
               Row(

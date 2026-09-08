@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
+import '../../widgets/google_sign_in_button.dart';
 import 'otp_screen.dart';
 import 'login_screen.dart';
 
@@ -19,6 +20,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   bool _isLoading = false;
+  bool _isGoogleLoading = false;
   bool _agreedToTerms = false;
 
   @override
@@ -58,6 +60,18 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       _showSnack('Registration failed: ${e.toString()}');
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _registerWithGoogle() async {
+    setState(() => _isGoogleLoading = true);
+    try {
+      await ref.read(authProvider.notifier).signInWithGoogle();
+      // Auth state listener handles navigation
+    } catch (e) {
+      _showSnack('Google sign-up failed: ${e.toString()}');
+    } finally {
+      if (mounted) setState(() => _isGoogleLoading = false);
     }
   }
 
@@ -240,6 +254,36 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               ).animate().fadeIn(delay: 350.ms),
 
               const SizedBox(height: 24),
+
+              // Divider with 'or'
+              Row(
+                children: [
+                  const Expanded(child: Divider(color: AppColors.divider)),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Text(
+                      'or register with',
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: AppColors.textLight,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  const Expanded(child: Divider(color: AppColors.divider)),
+                ],
+              ).animate().fadeIn(delay: 375.ms),
+
+              const SizedBox(height: 20),
+
+              // Google Sign Up Button
+              GoogleSignInButton(
+                text: 'Sign up with Google',
+                isLoading: _isGoogleLoading,
+                onPressed: _isLoading || _isGoogleLoading ? null : _registerWithGoogle,
+              ).animate().fadeIn(delay: 400.ms),
+
+              const SizedBox(height: 28),
 
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,

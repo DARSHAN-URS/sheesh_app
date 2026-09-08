@@ -1,4 +1,4 @@
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/config.dart';
 
@@ -61,6 +61,14 @@ class SupabaseService {
       phone: phone,
       token: token,
       type: OtpType.sms,
+    );
+  }
+
+  /// Sign in with Google OAuth via Supabase
+  static Future<bool> signInWithGoogle() async {
+    return client.auth.signInWithOAuth(
+      OAuthProvider.google,
+      redirectTo: kIsWeb ? null : 'io.supabase.sheesh://login-callback',
     );
   }
 
