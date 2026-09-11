@@ -13,7 +13,7 @@ class ApiService {
   void initialize() {
     _dio = Dio(
       BaseOptions(
-        baseUrl: AppConfig.railwayApiUrl,
+        baseUrl: AppConfig.railwayApiUrl.replaceAll(RegExp(r'/+$'), ''),
         connectTimeout: const Duration(seconds: 30),
         receiveTimeout: const Duration(seconds: 30),
         headers: {'Content-Type': 'application/json'},

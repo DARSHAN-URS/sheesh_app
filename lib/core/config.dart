@@ -1,15 +1,13 @@
 /// App-wide constants and configuration
 class AppConfig {
   // ── API ───────────────────────────────────────────────────────
-  static const String railwayApiUrl = String.fromEnvironment(
-    'RAILWAY_API_URL',
-    defaultValue: 'http://localhost:8000', // Change to Railway URL after deploy
-  );
+  // Always connects to the live Railway backend
+  static const String railwayApiUrl = 'https://sheesh-production-b745.up.railway.app';
 
   // ── Supabase ──────────────────────────────────────────────────
   static const String supabaseUrl = String.fromEnvironment(
     'SUPABASE_URL',
-    defaultValue: 'YOUR_SUPABASE_URL',
+    defaultValue: 'https://tyfvtsrdrdznvowqdfdd.supabase.co',
   );
 
   static const String supabaseAnonKey = String.fromEnvironment(
