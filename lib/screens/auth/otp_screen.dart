@@ -97,6 +97,16 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AuthState>(authProvider, (prev, next) {
+      if (next.isAuthenticated && !next.isLoading) {
+        final dest = next.isSeller ? const SellerMainScreen() : const BuyerMainScreen();
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => dest),
+          (_) => false,
+        );
+      }
+    });
+
     final maskedPhone = '${widget.phone.substring(0, widget.phone.length - 4)}****';
 
     return Scaffold(

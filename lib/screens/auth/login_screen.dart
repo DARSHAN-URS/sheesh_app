@@ -6,6 +6,8 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/google_sign_in_button.dart';
+import '../buyer/buyer_main_screen.dart';
+import '../seller/seller_main_screen.dart';
 import 'otp_screen.dart';
 import 'register_screen.dart';
 
@@ -25,6 +27,26 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   bool _obscurePassword = true;
   bool _isLoading = false;
   bool _isGoogleLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final auth = ref.read(authProvider);
+      if (auth.isAuthenticated && !auth.isLoading) {
+        _navigateToHome(auth);
+      }
+    });
+  }
+
+  void _navigateToHome(AuthState authState) {
+    if (!mounted) return;
+    final dest = authState.isSeller ? const SellerMainScreen() : const BuyerMainScreen();
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => dest),
+      (_) => false,
+    );
+  }
 
   @override
   void dispose() {
@@ -67,7 +89,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     setState(() => _isLoading = true);
     try {
       await ref.read(authProvider.notifier).signInWithEmail(email, password);
-      // Auth listener will handle navigation via SplashScreen
+      if (!mounted) return;
+      _navigateToHome(ref.read(authProvider));
     } catch (e) {
       _showSnack('Login failed: ${e.toString()}');
     } finally {
@@ -79,10 +102,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     setState(() => _isGoogleLoading = true);
     try {
       await ref.read(authProvider.notifier).signInWithGoogle();
-      // Auth state listener handles navigation
+      // Google OAuth redirects back and triggers ref.listen in build()
     } catch (e) {
       _showSnack('Google sign-in failed: ${e.toString()}');
-    } finally {
       if (mounted) setState(() => _isGoogleLoading = false);
     }
   }
@@ -95,6 +117,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Listen for auth state changes (e.g. Google OAuth redirect callback)
+    ref.listen<AuthState>(authProvider, (prev, next) {
+      if (next.isAuthenticated && !next.isLoading) {
+        _navigateToHome(next);
+      }
+    });
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(

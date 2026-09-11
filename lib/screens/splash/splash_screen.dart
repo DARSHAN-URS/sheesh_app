@@ -6,6 +6,7 @@ import '../../theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
 import '../auth/login_screen.dart';
 import '../buyer/buyer_main_screen.dart';
+import '../seller/seller_main_screen.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -20,7 +21,13 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    Future.delayed(const Duration(seconds: 2), _tryNavigate);
+    Future.delayed(const Duration(milliseconds: 2200), _tryNavigate);
+    // Fallback: never stay stuck on splash screen for more than 4 seconds
+    Future.delayed(const Duration(seconds: 4), () {
+      if (!_navigated && mounted) {
+        _doNavigate(ref.read(authProvider));
+      }
+    });
   }
 
   void _tryNavigate() {
@@ -33,7 +40,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   void _doNavigate(AuthState auth) {
     if (_navigated || !mounted) return;
     _navigated = true;
-    final dest = auth.isAuthenticated ? const BuyerMainScreen() : const LoginScreen();
+    final dest = auth.isAuthenticated
+        ? (auth.isSeller ? const SellerMainScreen() : const BuyerMainScreen())
+        : const LoginScreen();
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) => dest,

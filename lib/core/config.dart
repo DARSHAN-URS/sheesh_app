@@ -12,7 +12,8 @@ class AppConfig {
 
   static const String supabaseAnonKey = String.fromEnvironment(
     'SUPABASE_ANON_KEY',
-    defaultValue: 'YOUR_SUPABASE_ANON_KEY',
+    defaultValue:
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR5ZnZ0c3JkcmR6bnZvd3FkZmRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg1MzA5MzEsImV4cCI6MjEwNDEwNjkzMX0.QoRguAM3lrd3TviqCiZGMgiBMLCLU_jLfbj8G7h5zqc',
   );
 
   // ── Razorpay ──────────────────────────────────────────────────

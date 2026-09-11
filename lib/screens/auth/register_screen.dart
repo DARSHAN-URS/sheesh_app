@@ -6,6 +6,8 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/google_sign_in_button.dart';
+import '../buyer/buyer_main_screen.dart';
+import '../seller/seller_main_screen.dart';
 import 'otp_screen.dart';
 import 'login_screen.dart';
 
@@ -22,6 +24,26 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   bool _isLoading = false;
   bool _isGoogleLoading = false;
   bool _agreedToTerms = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final auth = ref.read(authProvider);
+      if (auth.isAuthenticated && !auth.isLoading) {
+        _navigateToHome(auth);
+      }
+    });
+  }
+
+  void _navigateToHome(AuthState authState) {
+    if (!mounted) return;
+    final dest = authState.isSeller ? const SellerMainScreen() : const BuyerMainScreen();
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => dest),
+      (_) => false,
+    );
+  }
 
   @override
   void dispose() {
@@ -67,10 +89,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     setState(() => _isGoogleLoading = true);
     try {
       await ref.read(authProvider.notifier).signInWithGoogle();
-      // Auth state listener handles navigation
+      // Google OAuth completion will trigger ref.listen in build()
     } catch (e) {
       _showSnack('Google sign-up failed: ${e.toString()}');
-    } finally {
       if (mounted) setState(() => _isGoogleLoading = false);
     }
   }
@@ -83,6 +104,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Listen for auth state changes (e.g. Google OAuth redirect callback)
+    ref.listen<AuthState>(authProvider, (prev, next) {
+      if (next.isAuthenticated && !next.isLoading) {
+        _navigateToHome(next);
+      }
+    });
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
