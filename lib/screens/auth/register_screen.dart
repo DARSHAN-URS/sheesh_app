@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -20,7 +19,7 @@ class RegisterScreen extends ConsumerStatefulWidget {
 
 class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _nameController = TextEditingController();
-  final _phoneController = TextEditingController();
+  final _emailController = TextEditingController();
   bool _isLoading = false;
   bool _isGoogleLoading = false;
   bool _agreedToTerms = false;
@@ -38,6 +37,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
   void _navigateToHome(AuthState authState) {
     if (!mounted) return;
+    if (authState.isSeller) {
+      ref.read(isSellerModeProvider.notifier).state = true;
+    } else {
+      ref.read(isSellerModeProvider.notifier).state = false;
+    }
     final dest = authState.isSeller ? const SellerMainScreen() : const BuyerMainScreen();
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => dest),
@@ -48,20 +52,20 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   @override
   void dispose() {
     _nameController.dispose();
-    _phoneController.dispose();
+    _emailController.dispose();
     super.dispose();
   }
 
   Future<void> _register() async {
     final name = _nameController.text.trim();
-    final phone = _phoneController.text.trim();
+    final email = _emailController.text.trim();
 
     if (name.isEmpty) {
       _showSnack('Please enter your full name');
       return;
     }
-    if (phone.length < 10) {
-      _showSnack('Enter a valid 10-digit phone number');
+    if (email.isEmpty || !email.contains('@')) {
+      _showSnack('Please enter a valid email address');
       return;
     }
     if (!_agreedToTerms) {
@@ -71,12 +75,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
     setState(() => _isLoading = true);
     try {
-      final formatted = phone.startsWith('+91') ? phone : '+91$phone';
-      await ref.read(authProvider.notifier).sendPhoneOtp(formatted);
+      await ref.read(authProvider.notifier).sendEmailOtp(email, fullName: name);
       if (!mounted) return;
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => OtpScreen(phone: formatted)),
+        MaterialPageRoute(
+          builder: (_) => OtpScreen(email: email, fullName: name),
+        ),
       );
     } catch (e) {
       _showSnack('Registration failed: ${e.toString()}');
@@ -156,26 +161,15 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
               const SizedBox(height: 20),
 
-              // Phone
-              _label('Mobile Number'),
+              // Email Address
+              _label('Email Address'),
               const SizedBox(height: 8),
               TextField(
-                controller: _phoneController,
-                keyboardType: TextInputType.phone,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                maxLength: 10,
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
                 decoration: _inputDeco(
-                  hint: '10-digit number',
-                  prefix: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                    child: Text(
-                      '+91',
-                      style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ),
+                  hint: 'you@example.com',
+                  prefix: const Icon(Icons.mail_outline_rounded, color: AppColors.primary, size: 20),
                 ),
               ).animate().fadeIn(delay: 200.ms),
 
@@ -271,7 +265,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
                         )
                       : Text(
-                          'Continue with OTP',
+                          'Continue with Email OTP',
                           style: GoogleFonts.poppins(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,

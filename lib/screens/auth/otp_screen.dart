@@ -9,8 +9,9 @@ import '../buyer/buyer_main_screen.dart';
 import '../seller/seller_main_screen.dart';
 
 class OtpScreen extends ConsumerStatefulWidget {
-  final String phone;
-  const OtpScreen({super.key, required this.phone});
+  final String email;
+  final String? fullName;
+  const OtpScreen({super.key, required this.email, this.fullName});
 
   @override
   ConsumerState<OtpScreen> createState() => _OtpScreenState();
@@ -57,10 +58,19 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     }
     setState(() => _isLoading = true);
     try {
-      await ref.read(authProvider.notifier).verifyPhoneOtp(widget.phone, _otp);
+      await ref.read(authProvider.notifier).verifyEmailOtp(
+        widget.email,
+        _otp,
+        fullName: widget.fullName,
+      );
       if (!mounted) return;
       // Navigate to appropriate screen
       final authState = ref.read(authProvider);
+      if (authState.isSeller) {
+        ref.read(isSellerModeProvider.notifier).state = true;
+      } else {
+        ref.read(isSellerModeProvider.notifier).state = false;
+      }
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(
@@ -71,7 +81,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
         (_) => false,
       );
     } catch (e) {
-      _showSnack('Invalid OTP. Please try again.');
+      _showSnack('Invalid OTP. Please check your email and try again.');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -82,10 +92,13 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     setState(() => _resendCountdown = 30);
     _startResendTimer();
     try {
-      await ref.read(authProvider.notifier).sendPhoneOtp(widget.phone);
-      _showSnack('OTP resent!');
+      await ref.read(authProvider.notifier).sendEmailOtp(
+        widget.email,
+        fullName: widget.fullName,
+      );
+      _showSnack('New OTP sent to your email!');
     } catch (e) {
-      _showSnack('Failed to resend OTP');
+      _showSnack('Failed to resend OTP: ${e.toString()}');
     }
   }
 
@@ -99,6 +112,11 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
   Widget build(BuildContext context) {
     ref.listen<AuthState>(authProvider, (prev, next) {
       if (next.isAuthenticated && !next.isLoading) {
+        if (next.isSeller) {
+          ref.read(isSellerModeProvider.notifier).state = true;
+        } else {
+          ref.read(isSellerModeProvider.notifier).state = false;
+        }
         final dest = next.isSeller ? const SellerMainScreen() : const BuyerMainScreen();
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => dest),
@@ -107,7 +125,13 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
       }
     });
 
-    final maskedPhone = '${widget.phone.substring(0, widget.phone.length - 4)}****';
+    final emailParts = widget.email.split('@');
+    final userPart = emailParts.first;
+    final domain = emailParts.length > 1 ? '@${emailParts[1]}' : '';
+    final maskedUser = userPart.length > 2
+        ? '${userPart.substring(0, 2)}***${userPart.substring(userPart.length - 1)}'
+        : '$userPart***';
+    final maskedEmail = '$maskedUser$domain';
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -145,14 +169,14 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                       ),
                     ],
                   ),
-                  child: const Icon(Icons.sms_rounded, color: Colors.white, size: 40),
+                  child: const Icon(Icons.mark_email_read_rounded, color: Colors.white, size: 40),
                 ).animate().scale(duration: 500.ms, curve: Curves.elasticOut),
               ),
 
               const SizedBox(height: 36),
 
               Text(
-                'Verify your number',
+                'Verify your email',
                 style: GoogleFonts.poppins(
                   fontSize: 26,
                   fontWeight: FontWeight.w700,
@@ -166,9 +190,9 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                 text: TextSpan(
                   style: GoogleFonts.poppins(fontSize: 14, color: AppColors.textLight),
                   children: [
-                    const TextSpan(text: 'OTP sent to '),
+                    const TextSpan(text: 'Enter the 6-digit OTP code sent to '),
                     TextSpan(
-                      text: maskedPhone,
+                      text: maskedEmail,
                       style: const TextStyle(
                         color: AppColors.primary,
                         fontWeight: FontWeight.w600,

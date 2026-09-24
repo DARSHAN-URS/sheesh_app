@@ -15,17 +15,17 @@ class SellerProfileScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authProvider);
     final seller = auth.sellerProfile ??
-        const Seller(
+        Seller(
           id: 'seller_current',
-          userId: 'user_current',
-          name: 'Artisan',
+          userId: auth.supabaseUser?.id ?? 'user_current',
+          name: auth.fullName,
           storeName: 'My Sheesh Store',
           tagline: 'Handcrafted with Love in Moradabad',
           bio: 'Moradabad local artisan',
           craftStory: 'Traditional Moradabad crafts passed down generations.',
-          location: 'Moradabad, UP',
+          location: auth.city,
           categoryId: 'brass',
-          avatarUrl: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400',
+          avatarUrl: auth.avatarUrl ?? 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400',
           coverUrl: 'https://images.unsplash.com/photo-1606760227091-3dd870d97f1d?w=800',
           rating: 5.0,
           reviewsCount: 0,
@@ -120,6 +120,14 @@ class SellerProfileScreen extends ConsumerWidget {
             // Storefront Actions
             _buildActionTile(
               context,
+              title: 'Edit Store Details',
+              subtitle: 'Update store name, tagline, location & craft story',
+              icon: Icons.edit_note_rounded,
+              onTap: () => _showEditStoreDialog(context, ref, seller),
+            ),
+
+            _buildActionTile(
+              context,
               title: 'Public Storefront Preview',
               subtitle: 'See how Moradabad buyers see your brand',
               icon: Icons.visibility_outlined,
@@ -212,23 +220,186 @@ class SellerProfileScreen extends ConsumerWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.border),
       ),
-      child: ListTile(
-        onTap: onTap,
-        leading: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: AppColors.primary.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(10),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        clipBehavior: Clip.antiAlias,
+        child: ListTile(
+          onTap: onTap,
+          leading: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: AppColors.primary, size: 20),
           ),
-          child: Icon(icon, color: AppColors.primary, size: 20),
+          title: Text(title, style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold)),
+          subtitle: Text(subtitle, style: GoogleFonts.lato(fontSize: 11, color: AppColors.textSecondary)),
+          trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textLight),
         ),
-        title: Text(title, style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold)),
-        subtitle: Text(subtitle, style: GoogleFonts.lato(fontSize: 11, color: AppColors.textSecondary)),
-        trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textLight),
+      ),
+    );
+  }
+
+  void _showEditStoreDialog(BuildContext context, WidgetRef ref, Seller seller) {
+    final storeNameCtrl = TextEditingController(text: seller.storeName);
+    final avatarUrlCtrl = TextEditingController(text: seller.avatarUrl);
+    final taglineCtrl = TextEditingController(text: seller.tagline);
+    final locationCtrl = TextEditingController(text: seller.location);
+    final craftStoryCtrl = TextEditingController(text: seller.craftStory.isNotEmpty ? seller.craftStory : seller.bio);
+    bool isSaving = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => Container(
+          padding: EdgeInsets.only(
+            top: 24,
+            left: 20,
+            right: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+          ),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppColors.border,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Edit Store Profile 🏪',
+                  style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  'Customize your artisan store branding (independent of your buyer profile)',
+                  style: GoogleFonts.lato(fontSize: 12, color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: storeNameCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Store / Brand Name',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    prefixIcon: const Icon(Icons.storefront_outlined),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: avatarUrlCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Store Logo / Avatar Image URL',
+                    hintText: 'https://example.com/store-logo.jpg',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    prefixIcon: const Icon(Icons.image_outlined),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: taglineCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Tagline / Motto',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    prefixIcon: const Icon(Icons.flag_outlined),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: locationCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Workshop / Operating Location',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    prefixIcon: const Icon(Icons.location_on_outlined),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: craftStoryCtrl,
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    labelText: 'Artisan Story / Craft Heritage',
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    prefixIcon: const Icon(Icons.history_edu_outlined),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: isSaving
+                        ? null
+                        : () async {
+                            final sName = storeNameCtrl.text.trim();
+                            if (sName.isEmpty) return;
+                            setModalState(() => isSaving = true);
+                            try {
+                              await ref.read(authProvider.notifier).updateSellerProfile(
+                                storeName: sName,
+                                avatarUrl: avatarUrlCtrl.text.trim(),
+                                tagline: taglineCtrl.text.trim(),
+                                location: locationCtrl.text.trim(),
+                                craftStory: craftStoryCtrl.text.trim(),
+                              );
+                              if (ctx.mounted) Navigator.pop(ctx);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Store profile updated successfully! ✓'),
+                                    backgroundColor: AppColors.success,
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              setModalState(() => isSaving = false);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Failed to update: $e'),
+                                    backgroundColor: AppColors.error,
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                    child: isSaving
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          )
+                        : Text(
+                            'Save Changes',
+                            style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white),
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/cart_item.dart';
 import '../services/api_service.dart';
+import '../services/supabase_service.dart';
 
 class CartNotifier extends StateNotifier<AsyncValue<List<CartItem>>> {
   CartNotifier() : super(const AsyncValue.loading()) {
@@ -8,13 +9,22 @@ class CartNotifier extends StateNotifier<AsyncValue<List<CartItem>>> {
   }
 
   Future<void> fetchCart() async {
+    final token = SupabaseService.accessToken;
+    if (token == null || !SupabaseService.isLoggedIn) {
+      state = const AsyncValue.data([]);
+      return;
+    }
     state = const AsyncValue.loading();
     try {
-      final data = await apiService.get('/cart') as List<dynamic>;
-      final items = data.map((e) => CartItem.fromJson(e as Map<String, dynamic>)).toList();
-      state = AsyncValue.data(items);
-    } catch (e, st) {
-      state = AsyncValue.error(e, st);
+      final data = await apiService.get('/cart');
+      if (data is List) {
+        final items = data.map((e) => CartItem.fromJson(e as Map<String, dynamic>)).toList();
+        state = AsyncValue.data(items);
+      } else {
+        state = const AsyncValue.data([]);
+      }
+    } catch (_) {
+      state = const AsyncValue.data([]);
     }
   }
 

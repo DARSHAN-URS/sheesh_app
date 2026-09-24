@@ -34,6 +34,7 @@ class AppColors {
   static const Color textDark = textPrimary;
   static const Color accent = gold;
   static const Color accentColor = gold;
+  static const Color backgroundLight = background;
 
   // Gradients
   static const LinearGradient primaryGradient = LinearGradient(

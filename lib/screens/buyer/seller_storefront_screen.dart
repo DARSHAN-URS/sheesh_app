@@ -7,6 +7,7 @@ import '../../models/product.dart';
 import '../../providers/products_provider.dart';
 import '../../widgets/network_image_fallback.dart';
 import '../../widgets/product_card.dart';
+import '../../utils/whatsapp_helper.dart';
 
 class SellerStorefrontScreen extends ConsumerStatefulWidget {
   final String sellerId;
@@ -228,11 +229,9 @@ class _SellerStorefrontScreenState extends ConsumerState<SellerStorefrontScreen>
                               style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold),
                             ),
                             onPressed: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Opening WhatsApp chat with ${seller.name} (${seller.phoneNumber})...'),
-                                  backgroundColor: const Color(0xFF25D366),
-                                ),
+                              WhatsAppHelper.openArtisanChat(
+                                phoneNumber: seller.phoneNumber,
+                                artisanName: seller.name,
                               );
                             },
                           ),

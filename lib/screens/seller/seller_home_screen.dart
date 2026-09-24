@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../theme/app_theme.dart';
-import '../../models/seller.dart';
 import '../../models/order.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/products_provider.dart';
 import '../../providers/orders_provider.dart';
 import '../../widgets/sheesh_app_bar.dart';
 import '../../widgets/network_image_fallback.dart';
+import '../../data/mock_data.dart';
 import 'add_product_screen.dart';
 import 'seller_orders_screen.dart';
 
@@ -18,32 +18,13 @@ class SellerHomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authProvider);
-    final seller = auth.sellerProfile ??
-        const Seller(
-          id: 'seller_current',
-          userId: 'user_current',
-          name: 'Artisan',
-          storeName: 'My Sheesh Store',
-          tagline: 'Handcrafted with Love in Moradabad',
-          bio: 'Moradabad local artisan',
-          craftStory: 'Traditional Moradabad crafts passed down generations.',
-          location: 'Moradabad, UP',
-          categoryId: 'brass',
-          avatarUrl: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400',
-          coverUrl: 'https://images.unsplash.com/photo-1606760227091-3dd870d97f1d?w=800',
-          rating: 5.0,
-          reviewsCount: 0,
-          productsCount: 0,
-          ordersCompleted: 0,
-          isVerified: true,
-          isFeatured: false,
-          memberSince: '2025',
-          responseTime: 'Within 2 hours',
-          phoneNumber: '+919876543210',
-        );
+    final seller = auth.sellerProfile ?? MockData.mockSellers.first;
 
-    final sellerOrders = ref.watch(sellerOrdersProvider).value ?? [];
-    final sellerProducts = ref.watch(sellerProductsProvider(seller.id)).value ?? [];
+    final rawOrders = ref.watch(sellerOrdersProvider).value ?? [];
+    final sellerOrders = rawOrders.isNotEmpty ? rawOrders : MockData.mockSellerOrders;
+    final realSellerId = auth.sellerProfile?.id ?? seller.id;
+    final rawProducts = ref.watch(sellerProductsProvider(realSellerId)).value ?? [];
+    final sellerProducts = rawProducts.isNotEmpty ? rawProducts : MockData.getProductsForSeller(realSellerId);
 
     final totalRevenue = sellerOrders
         .where((o) => o.paymentStatus == 'paid')
@@ -58,7 +39,9 @@ class SellerHomeScreen extends ConsumerWidget {
       body: RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(sellerOrdersProvider);
-          ref.invalidate(sellerProductsProvider(seller.id));
+          if (realSellerId.isNotEmpty) {
+            ref.invalidate(sellerProductsProvider(realSellerId));
+          }
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -300,6 +283,16 @@ class SellerHomeScreen extends ConsumerWidget {
 
               const SizedBox(height: 24),
 
+              // Store Analytics & Weekly Sales Chart
+              _buildAnalyticsSection(),
+
+              const SizedBox(height: 24),
+
+              // Top Performing Crafts
+              _buildTopCraftsSection(),
+
+              const SizedBox(height: 24),
+
               // Recent Customer Orders Card
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -319,72 +312,142 @@ class SellerHomeScreen extends ConsumerWidget {
                       );
                     },
                     child: Text(
-                      'View All',
+                      'View All (${sellerOrders.length})',
                       style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary),
                     ),
                   ),
                 ],
               ),
+              const SizedBox(height: 8),
 
               if (sellerOrders.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                Column(
+                  children: sellerOrders.take(3).map((order) {
+                    final statusColor = order.status == OrderStatus.delivered
+                        ? AppColors.success
+                        : (order.status == OrderStatus.shipped
+                            ? AppColors.primary
+                            : AppColors.goldDark);
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppColors.border),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.02),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(
+                                    order.customerName,
+                                    style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.backgroundLight,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      order.orderNumber,
+                                      style: GoogleFonts.lato(fontSize: 10, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: statusColor.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  order.status.displayName,
+                                  style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: statusColor),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
                           Text(
-                            sellerOrders.first.customerName,
-                            style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold),
+                            '${order.items.length} item(s): ${order.items.first.productName}',
+                            style: GoogleFonts.lato(fontSize: 12, color: AppColors.textPrimary),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              sellerOrders.first.status.displayName,
-                              style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.primary),
-                            ),
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              Text(
+                                '₹${order.totalAmount.toInt()}',
+                                style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.primaryDark),
+                              ),
+                              const SizedBox(width: 8),
+                              Text('•', style: TextStyle(color: AppColors.textLight)),
+                              const SizedBox(width: 8),
+                              Text(
+                                order.paymentMethod,
+                                style: GoogleFonts.lato(fontSize: 11, color: AppColors.textSecondary),
+                              ),
+                            ],
+                          ),
+                          const Divider(height: 16),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.location_on_outlined, size: 13, color: AppColors.textLight),
+                                    const SizedBox(width: 4),
+                                    Expanded(
+                                      child: Text(
+                                        order.deliveryAddress,
+                                        style: GoogleFonts.lato(fontSize: 11, color: AppColors.textLight),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              TextButton(
+                                style: TextButton.styleFrom(
+                                  padding: EdgeInsets.zero,
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                onPressed: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(builder: (_) => const SellerOrdersScreen()),
+                                  );
+                                },
+                                child: Text(
+                                  'Manage →',
+                                  style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${sellerOrders.first.items.length} items • ₹${sellerOrders.first.totalAmount.toInt()} • ${sellerOrders.first.paymentMethod}',
-                        style: GoogleFonts.lato(fontSize: 12, color: AppColors.textSecondary),
-                      ),
-                      const Divider(height: 20),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              '📍 ${sellerOrders.first.deliveryAddress}',
-                              style: GoogleFonts.lato(fontSize: 11, color: AppColors.textLight),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(builder: (_) => const SellerOrdersScreen()),
-                              );
-                            },
-                            child: const Text('Update Status →', style: TextStyle(fontSize: 11)),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+                    );
+                  }).toList(),
                 )
               else
                 Container(
@@ -457,6 +520,287 @@ class SellerHomeScreen extends ConsumerWidget {
             subtitle,
             style: GoogleFonts.lato(fontSize: 11, color: color, fontWeight: FontWeight.w600),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnalyticsSection() {
+    final dailySales = (MockData.mockAnalytics['daily_sales'] as List<dynamic>?) ?? [];
+    const maxAmount = 12000.0;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Weekly Store Revenue',
+                    style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                  ),
+                  Text(
+                    '7-day artisan sales tracker',
+                    style: GoogleFonts.lato(fontSize: 11, color: AppColors.textLight),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.success.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.trending_up_rounded, size: 14, color: AppColors.success),
+                    const SizedBox(width: 4),
+                    Text(
+                      '+18.4% this week',
+                      style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.success),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                '₹48,650',
+                style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.w900, color: AppColors.primaryDark),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '• 32 orders dispatched',
+                style: GoogleFonts.lato(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+
+          // Daily Sales Bar Chart
+          SizedBox(
+            height: 120,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: dailySales.map((item) {
+                final day = item['day'] as String;
+                final amount = (item['amount'] as num).toDouble();
+                final isPeak = day == 'Sat';
+                final barHeight = ((amount / maxAmount) * 75).clamp(16.0, 75.0);
+
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        if (isPeak)
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 2),
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: AppColors.goldDark,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              'Peak',
+                              style: GoogleFonts.poppins(fontSize: 8, color: Colors.white, fontWeight: FontWeight.bold),
+                            ),
+                          )
+                        else
+                          Text(
+                            '₹${(amount / 1000).toStringAsFixed(1)}k',
+                            style: GoogleFonts.lato(fontSize: 8, color: AppColors.textLight),
+                          ),
+                        const SizedBox(height: 3),
+                        Container(
+                          height: barHeight,
+                          decoration: BoxDecoration(
+                            gradient: isPeak
+                                ? AppColors.goldGradient
+                                : const LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [AppColors.primaryLight, AppColors.primary],
+                                  ),
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+                            boxShadow: isPeak
+                                ? [
+                                    BoxShadow(
+                                      color: AppColors.goldDark.withValues(alpha: 0.35),
+                                      blurRadius: 6,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          day,
+                          style: GoogleFonts.poppins(
+                            fontSize: 10,
+                            fontWeight: isPeak ? FontWeight.bold : FontWeight.w500,
+                            color: isPeak ? AppColors.primaryDark : AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+
+          const Divider(height: 24),
+
+          // Key Highlights Row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildMiniStat(icon: Icons.verified_outlined, color: AppColors.success, label: 'Fulfillment', value: '99.4%'),
+              Container(height: 24, width: 1, color: AppColors.border),
+              _buildMiniStat(icon: Icons.repeat_rounded, color: const Color(0xFF8E44AD), label: 'Repeat Buyers', value: '42%'),
+              Container(height: 24, width: 1, color: AppColors.border),
+              _buildMiniStat(icon: Icons.receipt_long_outlined, color: AppColors.primary, label: 'Avg Order', value: '₹2,840'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMiniStat({
+    required IconData icon,
+    required Color color,
+    required String label,
+    required String value,
+  }) {
+    return Column(
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 13, color: color),
+            const SizedBox(width: 4),
+            Text(value, style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+          ],
+        ),
+        Text(label, style: GoogleFonts.lato(fontSize: 10, color: AppColors.textLight)),
+      ],
+    );
+  }
+
+  Widget _buildTopCraftsSection() {
+    final topCrafts = (MockData.mockAnalytics['top_crafts'] as List<dynamic>?) ?? [];
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Top Performing Crafts',
+                style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+              ),
+              Text(
+                'By units sold',
+                style: GoogleFonts.lato(fontSize: 11, color: AppColors.textLight),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...topCrafts.asMap().entries.map((entry) {
+            final index = entry.key;
+            final craft = entry.value as Map<String, dynamic>;
+            final rankColors = [AppColors.goldDark, const Color(0xFF7F8C8D), const Color(0xFFCD7F32)];
+            final rankBadges = ['🥇 #1', '🥈 #2', '🥉 #3'];
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.backgroundLight,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: rankColors[index].withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      rankBadges[index],
+                      style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: rankColors[index]),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          craft['name'] as String,
+                          style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          '${craft['sales_count']} sold this month',
+                          style: GoogleFonts.lato(fontSize: 10, color: AppColors.textSecondary),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    '₹${(craft['revenue'] as num).toInt()}',
+                    style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.primaryDark),
+                  ),
+                ],
+              ),
+            );
+          }),
         ],
       ),
     );

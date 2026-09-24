@@ -93,7 +93,6 @@ class SellerProductsScreen extends ConsumerWidget {
                     final product = products[index];
                     return Container(
                       margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(16),
@@ -105,73 +104,194 @@ class SellerProductsScreen extends ConsumerWidget {
                           ),
                         ],
                       ),
-                      child: Row(
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: SizedBox(
-                              width: 70,
-                              height: 70,
-                              child: NetworkImageFallback(
-                                imageUrl: product.imageUrls.isNotEmpty ? product.imageUrls.first : '',
+                      child: Material(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(16),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () async {
+                            final updated = await Navigator.of(context).push<bool>(
+                              MaterialPageRoute(
+                                builder: (_) => AddProductScreen(productToEdit: product),
                               ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                            );
+                            if (updated == true && sellerId.isNotEmpty) {
+                              ref.invalidate(sellerProductsProvider(sellerId));
+                            }
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Row(
                               children: [
-                                Text(
-                                  product.name,
-                                  style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  '₹${product.price.toInt()} • ⭐ ${product.rating} (${product.reviewsCount})',
-                                  style: GoogleFonts.lato(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.primary,
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: SizedBox(
+                                    width: 70,
+                                    height: 70,
+                                    child: NetworkImageFallback(
+                                      imageUrl: product.imageUrls.isNotEmpty ? product.imageUrls.first : '',
+                                    ),
                                   ),
                                 ),
-                                const SizedBox(height: 4),
-                                Row(
-                                  children: [
-                                    Text(
-                                      product.inStock ? 'In Stock ✓' : 'Out of Stock ✕',
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                        color: product.inStock ? AppColors.success : AppColors.error,
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        product.name,
+                                        style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        '₹${product.price.toInt()} • ⭐ ${product.rating} (${product.reviewsCount})',
+                                        style: GoogleFonts.lato(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.primary,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          Text(
+                                            product.inStock ? 'In Stock ✓' : 'Out of Stock ✕',
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: product.inStock ? AppColors.success : AppColors.error,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                // Stock Switch & Menu
+                                Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Transform.scale(
+                                      scale: 0.8,
+                                      child: Switch(
+                                        value: product.inStock,
+                                        activeThumbColor: AppColors.primary,
+                                        onChanged: (val) async {
+                                          try {
+                                            await apiService.put('/products/${product.id}', data: {'in_stock': val});
+                                            if (sellerId.isNotEmpty) {
+                                              ref.invalidate(sellerProductsProvider(sellerId));
+                                            }
+                                          } catch (_) {}
+                                        },
+                                      ),
+                                    ),
+                                    PopupMenuButton<String>(
+                                      icon: const Icon(Icons.more_vert, size: 20, color: AppColors.textSecondary),
+                                      padding: EdgeInsets.zero,
+                                      onSelected: (value) async {
+                                        if (value == 'edit') {
+                                          final updated = await Navigator.of(context).push<bool>(
+                                            MaterialPageRoute(
+                                              builder: (_) => AddProductScreen(productToEdit: product),
+                                            ),
+                                          );
+                                          if (updated == true && sellerId.isNotEmpty) {
+                                            ref.invalidate(sellerProductsProvider(sellerId));
+                                          }
+                                        } else if (value == 'delete') {
+                                          _confirmDeleteProduct(context, ref, product, sellerId);
+                                        }
+                                      },
+                                      itemBuilder: (ctx) => [
+                                        const PopupMenuItem(
+                                          value: 'edit',
+                                          child: Row(
+                                            children: [
+                                              Icon(Icons.edit_outlined, size: 18, color: AppColors.primary),
+                                              SizedBox(width: 8),
+                                              Text('Edit Details'),
+                                            ],
+                                          ),
+                                        ),
+                                        const PopupMenuItem(
+                                          value: 'delete',
+                                          child: Row(
+                                            children: [
+                                              Icon(Icons.delete_outline, size: 18, color: AppColors.error),
+                                              SizedBox(width: 8),
+                                              Text('Delete', style: TextStyle(color: AppColors.error)),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
                               ],
                             ),
                           ),
-                          // Stock Toggle Switch
-                          Switch(
-                            value: product.inStock,
-                            activeThumbColor: AppColors.primary,
-                            onChanged: (val) async {
-                              try {
-                                await apiService.put('/products/${product.id}', data: {'in_stock': val});
-                                if (sellerId.isNotEmpty) {
-                                  ref.invalidate(sellerProductsProvider(sellerId));
-                                }
-                              } catch (_) {}
-                            },
-                          ),
-                        ],
+                        ),
                       ),
                     );
                   },
                 ),
         ),
+      ),
+    );
+  }
+
+  void _confirmDeleteProduct(BuildContext context, WidgetRef ref, Product product, String sellerId) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Delete Product?',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        content: Text(
+          'Are you sure you want to remove "${product.name}" from your catalog?',
+          style: GoogleFonts.lato(fontSize: 13, color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: GoogleFonts.poppins(color: AppColors.textLight)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                await apiService.delete('/products/${product.id}');
+                if (sellerId.isNotEmpty) {
+                  ref.invalidate(sellerProductsProvider(sellerId));
+                }
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Product deleted successfully'),
+                      backgroundColor: AppColors.error,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to delete: $e')),
+                  );
+                }
+              }
+            },
+            child: Text('Delete', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
     );
   }

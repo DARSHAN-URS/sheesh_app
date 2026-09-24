@@ -47,12 +47,32 @@ class SupabaseService {
     return client.auth.signInWithPassword(email: email, password: password);
   }
 
-  /// Send OTP to phone number (Indian format: +91XXXXXXXXXX)
+  /// Send OTP to email address
+  static Future<void> sendEmailOtp(String email, {Map<String, dynamic>? data}) async {
+    await client.auth.signInWithOtp(
+      email: email,
+      data: data,
+    );
+  }
+
+  /// Verify email OTP
+  static Future<AuthResponse> verifyEmailOtp({
+    required String email,
+    required String token,
+  }) async {
+    return client.auth.verifyOTP(
+      email: email,
+      token: token,
+      type: OtpType.email,
+    );
+  }
+
+  /// Send OTP to phone number (Indian format: +91XXXXXXXXXX) [Legacy]
   static Future<void> sendPhoneOtp(String phone) async {
     await client.auth.signInWithOtp(phone: phone);
   }
 
-  /// Verify phone OTP
+  /// Verify phone OTP [Legacy]
   static Future<AuthResponse> verifyPhoneOtp({
     required String phone,
     required String token,

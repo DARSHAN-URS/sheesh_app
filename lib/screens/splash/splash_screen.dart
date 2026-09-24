@@ -40,9 +40,18 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   void _doNavigate(AuthState auth) {
     if (_navigated || !mounted) return;
     _navigated = true;
-    final dest = auth.isAuthenticated
-        ? (auth.isSeller ? const SellerMainScreen() : const BuyerMainScreen())
-        : const LoginScreen();
+    Widget dest;
+    if (auth.isAuthenticated) {
+      if (auth.isSeller) {
+        // Set mode to seller so SellerMainScreen doesn't immediately redirect back
+        ref.read(isSellerModeProvider.notifier).state = true;
+        dest = const SellerMainScreen();
+      } else {
+        dest = const BuyerMainScreen();
+      }
+    } else {
+      dest = const LoginScreen();
+    }
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) => dest,

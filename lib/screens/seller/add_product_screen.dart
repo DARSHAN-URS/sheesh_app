@@ -5,13 +5,15 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../../theme/app_theme.dart';
+import '../../models/product.dart';
 import '../../providers/products_provider.dart';
 import '../../services/api_service.dart';
 import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
 
 class AddProductScreen extends ConsumerStatefulWidget {
-  const AddProductScreen({super.key});
+  final Product? productToEdit;
+  const AddProductScreen({super.key, this.productToEdit});
 
   @override
   ConsumerState<AddProductScreen> createState() => _AddProductScreenState();
@@ -35,6 +37,25 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   double _uploadProgress = 0;
 
   @override
+  void initState() {
+    super.initState();
+    final p = widget.productToEdit;
+    if (p != null) {
+      _nameController.text = p.name;
+      _descriptionController.text = p.description;
+      _priceController.text = p.price.toInt().toString();
+      if (p.originalPrice != null) {
+        _originalPriceController.text = p.originalPrice!.toInt().toString();
+      }
+      _materialController.text = p.materialOrTechnique;
+      _deliveryTimeController.text = p.deliveryTime;
+      _tagsController.text = p.tags.join(', ');
+      _selectedCategoryId = p.categoryId.isNotEmpty ? p.categoryId : null;
+      _isHandmade = p.isHandmade;
+    }
+  }
+
+  @override
   void dispose() {
     _nameController.dispose();
     _descriptionController.dispose();
@@ -54,8 +75,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   }
 
   Future<void> _submit() async {
+    final isEditing = widget.productToEdit != null;
     if (!_formKey.currentState!.validate()) return;
-    if (_selectedImages.isEmpty) {
+    if (!isEditing && _selectedImages.isEmpty) {
       _showSnack('Please add at least one product image');
       return;
     }
@@ -67,8 +89,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // 1. Create product
-      final productData = await apiService.post('/products', data: {
+      final payload = {
         'name': _nameController.text.trim(),
         'description': _descriptionController.text.trim(),
         'price': double.parse(_priceController.text),
@@ -84,11 +105,18 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
             .map((t) => t.trim())
             .where((t) => t.isNotEmpty)
             .toList(),
-      });
+      };
 
-      final productId = productData['id'] as String;
+      String productId;
+      if (isEditing) {
+        productId = widget.productToEdit!.id;
+        await apiService.put('/products/$productId', data: payload);
+      } else {
+        final productData = await apiService.post('/products', data: payload);
+        productId = productData['id'] as String;
+      }
 
-      // 2. Upload images
+      // Upload newly selected images
       for (int i = 0; i < _selectedImages.length; i++) {
         setState(() => _uploadProgress = (i + 1) / _selectedImages.length);
 
@@ -96,7 +124,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         final ext = file.path.split('.').last;
         final formData = FormData.fromMap({
           'file': await MultipartFile.fromFile(file.path, filename: '${const Uuid().v4()}.$ext'),
-          'sort_order': i.toString(),
+          'sort_order': (i + (widget.productToEdit?.imageUrls.length ?? 0)).toString(),
         });
 
         await apiService.postMultipart('/products/$productId/images', formData);
@@ -104,11 +132,14 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Product added successfully! 🎉'), backgroundColor: Colors.green),
+        SnackBar(
+          content: Text(isEditing ? 'Product updated successfully! 🎉' : 'Product added successfully! 🎉'),
+          backgroundColor: Colors.green,
+        ),
       );
       Navigator.pop(context, true);
     } catch (e) {
-      _showSnack('Failed to add product: $e');
+      _showSnack('Failed to ${isEditing ? "update" : "add"} product: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -128,7 +159,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text(
-          'Add Product',
+          widget.productToEdit != null ? 'Edit Handcrafted Product' : 'Add Product',
           style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: AppColors.textDark),
         ),
         backgroundColor: Colors.white,
@@ -377,7 +408,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                     child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
                   )
                 : Text(
-                    'Add Product',
+                    widget.productToEdit != null ? 'Update Product' : 'Add Product',
                     style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
           ),

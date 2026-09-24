@@ -8,8 +8,8 @@ import '../../providers/orders_provider.dart';
 import '../seller/seller_main_screen.dart';
 import 'buyer_home_screen.dart';
 import 'category_screen.dart';
-import 'wishlist_screen.dart';
 import 'orders_screen.dart';
+import 'buyer_profile_screen.dart';
 
 class BuyerMainScreen extends ConsumerStatefulWidget {
   final int initialTabIndex;
@@ -22,22 +22,35 @@ class BuyerMainScreen extends ConsumerStatefulWidget {
 
 class _BuyerMainScreenState extends ConsumerState<BuyerMainScreen> {
   late int _currentIndex;
+  bool _navigating = false;
 
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.initialTabIndex;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && ref.read(isSellerModeProvider)) {
+        ref.read(isSellerModeProvider.notifier).state = false;
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final isSellerMode = ref.watch(isSellerModeProvider);
     final wishlist = ref.watch(wishlistProvider);
     final orders = ref.watch(ordersProvider).value ?? [];
 
-    // If role switched to seller mode from the top bar, route seamlessly
-    if (isSellerMode) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+    // Listen for tab switch requests from child widgets (e.g. Profile quick links)
+    ref.listen<int>(buyerTabIndexProvider, (previous, next) {
+      if (next != _currentIndex && next >= 0 && next < 4) {
+        setState(() => _currentIndex = next);
+      }
+    });
+
+    // If role switched to seller mode from the top bar or profile, route seamlessly
+    ref.listen<bool>(isSellerModeProvider, (previous, next) {
+      if (previous == false && next && !_navigating) {
+        _navigating = true;
         Navigator.of(context).pushReplacement(
           PageRouteBuilder(
             pageBuilder: (context, anim1, anim2) => const SellerMainScreen(),
@@ -46,14 +59,14 @@ class _BuyerMainScreenState extends ConsumerState<BuyerMainScreen> {
                 FadeTransition(opacity: animation, child: child),
           ),
         );
-      });
-    }
+      }
+    });
 
     final List<Widget> screens = [
       const BuyerHomeScreen(),
       const CategoryScreen(),
-      const WishlistScreen(),
       const OrdersScreen(),
+      const BuyerProfileScreen(),
     ];
 
     return Scaffold(
@@ -100,31 +113,8 @@ class _BuyerMainScreenState extends ConsumerState<BuyerMainScreen> {
               icon: Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  const Icon(Icons.favorite_outline_rounded),
-                  if (wishlist.isNotEmpty)
-                    Positioned(
-                      right: -4,
-                      top: -2,
-                      child: Container(
-                        width: 8,
-                        height: 8,
-                        decoration: const BoxDecoration(
-                          color: AppColors.primary,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              activeIcon: const Icon(Icons.favorite_rounded),
-              label: 'Saved',
-            ),
-            BottomNavigationBarItem(
-              icon: Stack(
-                clipBehavior: Clip.none,
-                children: [
                   const Icon(Icons.local_shipping_outlined),
-                  if (orders.isNotEmpty)
+                  if (orders.isNotEmpty || wishlist.isNotEmpty)
                     Positioned(
                       right: -6,
                       top: -4,
@@ -135,7 +125,7 @@ class _BuyerMainScreenState extends ConsumerState<BuyerMainScreen> {
                           shape: BoxShape.circle,
                         ),
                         child: Text(
-                          '${orders.length}',
+                          '${orders.length + (wishlist.isNotEmpty ? 1 : 0)}',
                           style: const TextStyle(fontSize: 8, color: Colors.white, fontWeight: FontWeight.bold),
                         ),
                       ),
@@ -144,6 +134,11 @@ class _BuyerMainScreenState extends ConsumerState<BuyerMainScreen> {
               ),
               activeIcon: const Icon(Icons.local_shipping_rounded),
               label: 'Orders',
+            ),
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.person_outline_rounded),
+              activeIcon: Icon(Icons.person_rounded),
+              label: 'Profile',
             ),
           ],
         ),

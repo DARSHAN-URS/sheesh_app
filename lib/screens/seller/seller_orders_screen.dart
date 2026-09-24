@@ -177,6 +177,30 @@ class SellerOrdersScreen extends ConsumerWidget {
               ],
             ),
 
+            if (order.trackingNote != null && order.trackingNote!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.local_shipping_outlined, size: 15, color: AppColors.accentTeal),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Tracking / Note: ${order.trackingNote}',
+                        style: GoogleFonts.lato(fontSize: 11, color: AppColors.textPrimary, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
             const SizedBox(height: 14),
 
             // Status Update Flow Actions
@@ -225,14 +249,7 @@ class SellerOrdersScreen extends ConsumerWidget {
                         backgroundColor: AppColors.accentTeal,
                         padding: const EdgeInsets.symmetric(vertical: 10),
                       ),
-                      onPressed: () async {
-                        await ref.read(sellerOrdersNotifierProvider.notifier).updateStatus(order.id, 'shipped');
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Dispatched with Moradabad local courier!')),
-                          );
-                        }
-                      },
+                      onPressed: () => _showDispatchDialog(context, ref, order),
                       child: const Text('Handover for Delivery 🚚', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
                     ),
                   ),
@@ -272,6 +289,102 @@ class SellerOrdersScreen extends ConsumerWidget {
                   ),
                 ],
               ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showDispatchDialog(BuildContext context, WidgetRef ref, OrderModel order) {
+    final trackingCtrl = TextEditingController(text: 'Moradabad Express Courier');
+    bool isUpdating = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: Row(
+            children: [
+              const Icon(Icons.local_shipping_rounded, color: AppColors.accentTeal),
+              const SizedBox(width: 8),
+              Text(
+                'Handover Order',
+                style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Enter courier details or delivery notes for Order #${order.orderNumber}:',
+                style: GoogleFonts.lato(fontSize: 13, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: trackingCtrl,
+                autofocus: true,
+                decoration: InputDecoration(
+                  labelText: 'Courier / Tracking Info',
+                  hintText: 'e.g. Delhivery AWB 948102, Van Delivery',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  prefixIcon: const Icon(Icons.qr_code_2_rounded),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('Cancel', style: GoogleFonts.poppins(color: AppColors.textLight)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accentTeal,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: isUpdating
+                  ? null
+                  : () async {
+                      setState(() => isUpdating = true);
+                      final note = trackingCtrl.text.trim();
+                      try {
+                        await ref.read(sellerOrdersNotifierProvider.notifier).updateStatus(
+                          order.id,
+                          'shipped',
+                          trackingNote: note.isNotEmpty ? note : 'Dispatched with local Moradabad delivery',
+                        );
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Order dispatched! Courier tracking updated.'),
+                              backgroundColor: AppColors.success,
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        setState(() => isUpdating = false);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Failed to update status: $e')),
+                          );
+                        }
+                      }
+                    },
+              child: isUpdating
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                    )
+                  : Text(
+                      'Dispatch 🚚',
+                      style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold),
+                    ),
             ),
           ],
         ),

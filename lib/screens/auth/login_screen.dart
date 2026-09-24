@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -20,10 +20,9 @@ class LoginScreen extends ConsumerStatefulWidget {
 
 class _LoginScreenState extends ConsumerState<LoginScreen>
     with SingleTickerProviderStateMixin {
-  final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _useEmail = false;
+  bool _usePassword = false;
   bool _obscurePassword = true;
   bool _isLoading = false;
   bool _isGoogleLoading = false;
@@ -41,6 +40,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   void _navigateToHome(AuthState authState) {
     if (!mounted) return;
+    if (authState.isSeller) {
+      ref.read(isSellerModeProvider.notifier).state = true;
+    } else {
+      ref.read(isSellerModeProvider.notifier).state = false;
+    }
     final dest = authState.isSeller ? const SellerMainScreen() : const BuyerMainScreen();
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => dest),
@@ -50,27 +54,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   @override
   void dispose() {
-    _phoneController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
-  Future<void> _loginWithPhone() async {
-    final phone = _phoneController.text.trim();
-    if (phone.length < 10) {
-      _showSnack('Enter a valid 10-digit phone number');
+  Future<void> _loginWithEmailOtp() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty || !email.contains('@')) {
+      _showSnack('Enter a valid email address');
       return;
     }
     setState(() => _isLoading = true);
     try {
-      // Format to +91 for Supabase
-      final formatted = phone.startsWith('+91') ? phone : '+91$phone';
-      await ref.read(authProvider.notifier).sendPhoneOtp(formatted);
+      await ref.read(authProvider.notifier).sendEmailOtp(email);
       if (!mounted) return;
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => OtpScreen(phone: formatted)),
+        MaterialPageRoute(builder: (_) => OtpScreen(email: email)),
       );
     } catch (e) {
       _showSnack(e.toString());
@@ -112,6 +113,91 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   void _showSnack(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: AppColors.primary),
+    );
+  }
+
+  void _showForgotPasswordDialog() {
+    final emailCtrl = TextEditingController(text: _emailController.text.trim());
+    bool isSending = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text(
+            'Reset Password',
+            style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 17),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Enter your email address and we\'ll send you a reset link.',
+                style: GoogleFonts.lato(fontSize: 13, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: emailCtrl,
+                keyboardType: TextInputType.emailAddress,
+                autofocus: true,
+                decoration: InputDecoration(
+                  labelText: 'Email Address',
+                  labelStyle: GoogleFonts.lato(fontSize: 13),
+                  prefixIcon: const Icon(Icons.email_outlined, size: 20),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('Cancel', style: GoogleFonts.poppins(color: AppColors.textLight)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                elevation: 0,
+              ),
+              onPressed: isSending
+                  ? null
+                  : () async {
+                      final email = emailCtrl.text.trim();
+                      if (email.isEmpty || !email.contains('@')) {
+                        return;
+                      }
+                      setState(() => isSending = true);
+                      try {
+                        await ref.read(authProvider.notifier).sendPasswordReset(email);
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Reset link sent to $email'),
+                              backgroundColor: AppColors.success,
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        setState(() => isSending = false);
+                        if (mounted) _showSnack('Failed to send reset email: $e');
+                      }
+                    },
+              child: isSending
+                  ? const SizedBox(
+                      width: 18, height: 18,
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                    )
+                  : Text('Send Reset Link', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -192,7 +278,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
               const SizedBox(height: 36),
 
-              // Toggle: Phone / Email
+              // Toggle: Email OTP / Password
               Container(
                 decoration: BoxDecoration(
                   color: AppColors.surface,
@@ -202,21 +288,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                   children: [
                     Expanded(
                       child: GestureDetector(
-                        onTap: () => setState(() => _useEmail = false),
+                        onTap: () => setState(() => _usePassword = false),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 200),
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           decoration: BoxDecoration(
-                            color: !_useEmail ? AppColors.primary : Colors.transparent,
+                            color: !_usePassword ? AppColors.primary : Colors.transparent,
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: Text(
-                            '📱  Phone OTP',
+                            '✉️  Email OTP',
                             textAlign: TextAlign.center,
                             style: GoogleFonts.poppins(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: !_useEmail ? Colors.white : AppColors.textLight,
+                              color: !_usePassword ? Colors.white : AppColors.textLight,
                             ),
                           ),
                         ),
@@ -224,21 +310,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     ),
                     Expanded(
                       child: GestureDetector(
-                        onTap: () => setState(() => _useEmail = true),
+                        onTap: () => setState(() => _usePassword = true),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 200),
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           decoration: BoxDecoration(
-                            color: _useEmail ? AppColors.primary : Colors.transparent,
+                            color: _usePassword ? AppColors.primary : Colors.transparent,
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: Text(
-                            '✉️  Email',
+                            '🔑  Password',
                             textAlign: TextAlign.center,
                             style: GoogleFonts.poppins(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: _useEmail ? Colors.white : AppColors.textLight,
+                              color: _usePassword ? Colors.white : AppColors.textLight,
                             ),
                           ),
                         ),
@@ -250,45 +336,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
               const SizedBox(height: 28),
 
-              if (!_useEmail) ...[
-                // Phone input
-                _buildLabel('Mobile Number'),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _phoneController,
-                  keyboardType: TextInputType.phone,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  maxLength: 10,
-                  decoration: _inputDecoration(
-                    hint: '10-digit mobile number',
-                    prefix: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                      child: Text(
-                        '+91',
-                        style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    ),
-                  ),
-                ).animate().fadeIn(delay: 250.ms),
+              // Email input (always present)
+              _buildLabel('Email Address'),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: _inputDecoration(
+                  hint: 'you@example.com',
+                  prefix: const Icon(Icons.mail_outline_rounded, color: AppColors.primary, size: 20),
+                ),
+              ).animate().fadeIn(delay: 250.ms),
 
+              if (!_usePassword) ...[
                 const SizedBox(height: 8),
                 Text(
-                  'We\'ll send a 6-digit OTP to verify your number',
+                  'We\'ll send a 6-digit OTP code to verify your email',
                   style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textLight),
                 ),
               ] else ...[
-                // Email input
-                _buildLabel('Email Address'),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: _inputDecoration(hint: 'you@example.com'),
-                ).animate().fadeIn(delay: 250.ms),
-
                 const SizedBox(height: 20),
 
                 _buildLabel('Password'),
@@ -298,6 +364,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                   obscureText: _obscurePassword,
                   decoration: _inputDecoration(
                     hint: 'Your password',
+                    prefix: const Icon(Icons.lock_outline_rounded, color: AppColors.primary, size: 20),
                     suffix: IconButton(
                       icon: Icon(
                         _obscurePassword ? Icons.visibility_off : Icons.visibility,
@@ -308,9 +375,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     ),
                   ),
                 ).animate().fadeIn(delay: 300.ms),
+
+                // Forgot Password
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: _showForgotPasswordDialog,
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                    ),
+                    child: Text(
+                      'Forgot Password?',
+                      style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ),
               ],
 
-              const SizedBox(height: 36),
+              const SizedBox(height: 20),
 
               // CTA Button
               SizedBox(
@@ -319,7 +402,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 child: ElevatedButton(
                   onPressed: _isLoading
                       ? null
-                      : (_useEmail ? _loginWithEmail : _loginWithPhone),
+                      : (_usePassword ? _loginWithEmail : _loginWithEmailOtp),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
@@ -338,7 +421,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                           ),
                         )
                       : Text(
-                          _useEmail ? 'Sign In' : 'Send OTP',
+                          _usePassword ? 'Sign In' : 'Send OTP',
                           style: GoogleFonts.poppins(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -403,6 +486,61 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                   ),
                 ],
               ).animate().fadeIn(delay: 400.ms),
+
+              const SizedBox(height: 24),
+
+              // Development-only Quick Preview / Explore Direct Access
+              if (kDebugMode) ...[
+                Center(
+                  child: Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 12,
+                    runSpacing: 10,
+                    children: [
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                          side: const BorderSide(color: AppColors.primary),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: const Icon(Icons.shopping_bag_outlined, size: 16, color: AppColors.primary),
+                        label: Text(
+                          'Explore Buyer View (Dev)',
+                          style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary),
+                        ),
+                        onPressed: () {
+                          ref.read(isSellerModeProvider.notifier).state = false;
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(builder: (_) => const BuyerMainScreen()),
+                          );
+                        },
+                      ),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.goldDark,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          elevation: 0,
+                        ),
+                        icon: const Icon(Icons.storefront_rounded, size: 16, color: Colors.white),
+                        label: Text(
+                          'View Seller Side 🏪 (Dev)',
+                          style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () {
+                          ref.read(isSellerModeProvider.notifier).state = true;
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(builder: (_) => const SellerMainScreen()),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ).animate().fadeIn(delay: 450.ms),
+              ],
             ],
           ),
         ),

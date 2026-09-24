@@ -3,12 +3,18 @@ import '../models/product.dart';
 import '../models/category.dart';
 import '../models/seller.dart';
 import '../services/api_service.dart';
+import '../data/mock_data.dart';
 
 // ─── Categories ───────────────────────────────────────────────────────────────
 
 final categoriesProvider = FutureProvider<List<Category>>((ref) async {
-  final data = await apiService.get('/categories') as List<dynamic>;
-  return data.map((e) => Category.fromJson(e as Map<String, dynamic>)).toList();
+  try {
+    final data = await apiService.get('/categories') as List<dynamic>;
+    final list = data.map((e) => Category.fromJson(e as Map<String, dynamic>)).toList();
+    return list.isNotEmpty ? list : MockData.mockCategories;
+  } catch (_) {
+    return MockData.mockCategories;
+  }
 });
 
 // ─── Products ─────────────────────────────────────────────────────────────────
@@ -50,6 +56,27 @@ class ProductsNotifier extends StateNotifier<AsyncValue<List<Product>>> {
 
   ProductsFilter _filter = const ProductsFilter();
 
+  List<Product> _filterMockProducts(ProductsFilter f) {
+    var list = MockData.mockProducts;
+    if (f.categoryId != null && f.categoryId!.isNotEmpty) {
+      list = list.where((p) => p.categoryId == f.categoryId).toList();
+    }
+    if (f.sellerId != null && f.sellerId!.isNotEmpty) {
+      list = list.where((p) => p.sellerId == f.sellerId).toList();
+    }
+    if (f.isFeatured == true) {
+      list = list.where((p) => p.isFeatured).toList();
+    }
+    if (f.search != null && f.search!.isNotEmpty) {
+      final q = f.search!.toLowerCase();
+      list = list.where((p) =>
+          p.name.toLowerCase().contains(q) ||
+          p.description.toLowerCase().contains(q) ||
+          p.tags.any((t) => t.toLowerCase().contains(q))).toList();
+    }
+    return list;
+  }
+
   Future<void> load({ProductsFilter? filter}) async {
     if (filter != null) _filter = filter;
     state = const AsyncValue.loading();
@@ -58,9 +85,18 @@ class ProductsNotifier extends StateNotifier<AsyncValue<List<Product>>> {
       final list = (data['data'] as List<dynamic>)
           .map((e) => Product.fromJson(e as Map<String, dynamic>))
           .toList();
-      state = AsyncValue.data(list);
+      if (list.isNotEmpty) {
+        state = AsyncValue.data(list);
+      } else {
+        state = AsyncValue.data(_filterMockProducts(_filter));
+      }
     } catch (e, st) {
-      state = AsyncValue.error(e, st);
+      final fallback = _filterMockProducts(_filter);
+      if (fallback.isNotEmpty) {
+        state = AsyncValue.data(fallback);
+      } else {
+        state = AsyncValue.error(e, st);
+      }
     }
   }
 
@@ -86,8 +122,13 @@ final productsProvider =
 
 // Featured products for home screen carousel
 final featuredProductsProvider = FutureProvider<List<Product>>((ref) async {
-  final data = await apiService.get('/products/featured') as List<dynamic>;
-  return data.map((e) => Product.fromJson(e as Map<String, dynamic>)).toList();
+  try {
+    final data = await apiService.get('/products/featured') as List<dynamic>;
+    final list = data.map((e) => Product.fromJson(e as Map<String, dynamic>)).toList();
+    return list.isNotEmpty ? list : MockData.mockProducts.where((p) => p.isFeatured).toList();
+  } catch (_) {
+    return MockData.mockProducts.where((p) => p.isFeatured).toList();
+  }
 });
 
 // Single product detail
@@ -96,15 +137,24 @@ final productDetailProvider = FutureProvider.family<Product?, String>((ref, id) 
     final data = await apiService.get('/products/$id');
     return Product.fromJson(data as Map<String, dynamic>);
   } catch (_) {
-    return null;
+    try {
+      return MockData.mockProducts.firstWhere((p) => p.id == id);
+    } catch (_) {
+      return MockData.mockProducts.isNotEmpty ? MockData.mockProducts.first : null;
+    }
   }
 });
 
 // ─── Sellers ──────────────────────────────────────────────────────────────────
 
 final featuredSellersProvider = FutureProvider<List<Seller>>((ref) async {
-  final data = await apiService.get('/sellers', params: {'is_featured': true}) as List<dynamic>;
-  return data.map((e) => Seller.fromJson(e as Map<String, dynamic>)).toList();
+  try {
+    final data = await apiService.get('/sellers', params: {'is_featured': true}) as List<dynamic>;
+    final list = data.map((e) => Seller.fromJson(e as Map<String, dynamic>)).toList();
+    return list.isNotEmpty ? list : MockData.mockSellers;
+  } catch (_) {
+    return MockData.mockSellers;
+  }
 });
 
 final sellerDetailProvider = FutureProvider.family<Seller?, String>((ref, id) async {
@@ -112,13 +162,25 @@ final sellerDetailProvider = FutureProvider.family<Seller?, String>((ref, id) as
     final data = await apiService.get('/sellers/$id');
     return Seller.fromJson(data as Map<String, dynamic>);
   } catch (_) {
-    return null;
+    try {
+      return MockData.mockSellers.firstWhere((s) => s.id == id);
+    } catch (_) {
+      return MockData.mockSellers.isNotEmpty ? MockData.mockSellers.first : null;
+    }
   }
 });
 
 final sellerProductsProvider = FutureProvider.family<List<Product>, String>((ref, sellerId) async {
-  final data = await apiService.get('/sellers/$sellerId/products') as List<dynamic>;
-  return data.map((e) => Product.fromJson(e as Map<String, dynamic>)).toList();
+  if (sellerId.isEmpty) return MockData.mockProducts.take(4).toList();
+  try {
+    final data = await apiService.get('/sellers/$sellerId/products');
+    if (data is List && data.isNotEmpty) {
+      return data.map((e) => Product.fromJson(e as Map<String, dynamic>)).toList();
+    }
+    return MockData.getProductsForSeller(sellerId);
+  } catch (_) {
+    return MockData.getProductsForSeller(sellerId);
+  }
 });
 
 // ─── Search ───────────────────────────────────────────────────────────────────
@@ -128,7 +190,17 @@ final searchQueryProvider = StateProvider<String>((ref) => '');
 final searchResultsProvider = FutureProvider<List<Product>>((ref) async {
   final query = ref.watch(searchQueryProvider);
   if (query.isEmpty) return [];
-  final data = await apiService.get('/products', params: {'search': query}) as Map<String, dynamic>;
-  final list = data['data'] as List<dynamic>;
-  return list.map((e) => Product.fromJson(e as Map<String, dynamic>)).toList();
+  try {
+    final data = await apiService.get('/products', params: {'search': query}) as Map<String, dynamic>;
+    final list = (data['data'] as List<dynamic>).map((e) => Product.fromJson(e as Map<String, dynamic>)).toList();
+    if (list.isNotEmpty) return list;
+  } catch (_) {}
+
+  final q = query.toLowerCase();
+  return MockData.mockProducts
+      .where((p) =>
+          p.name.toLowerCase().contains(q) ||
+          p.description.toLowerCase().contains(q) ||
+          p.tags.any((t) => t.toLowerCase().contains(q)))
+      .toList();
 });

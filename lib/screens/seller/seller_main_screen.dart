@@ -21,21 +21,28 @@ class SellerMainScreen extends ConsumerStatefulWidget {
 
 class _SellerMainScreenState extends ConsumerState<SellerMainScreen> {
   late int _currentIndex;
+  bool _navigating = false;
 
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.initialTabIndex;
+    // Ensure seller mode state is synced when mounted
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !ref.read(isSellerModeProvider)) {
+        ref.read(isSellerModeProvider.notifier).state = true;
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final isSellerMode = ref.watch(isSellerModeProvider);
     final sellerOrders = ref.watch(sellerOrdersProvider).value ?? [];
 
     // If role switched to buyer mode, route seamlessly
-    if (!isSellerMode) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+    ref.listen<bool>(isSellerModeProvider, (previous, next) {
+      if (previous == true && !next && !_navigating) {
+        _navigating = true;
         Navigator.of(context).pushReplacement(
           PageRouteBuilder(
             pageBuilder: (context, anim1, anim2) => const BuyerMainScreen(),
@@ -44,8 +51,8 @@ class _SellerMainScreenState extends ConsumerState<SellerMainScreen> {
                 FadeTransition(opacity: animation, child: child),
           ),
         );
-      });
-    }
+      }
+    });
 
     final List<Widget> screens = [
       const SellerHomeScreen(),

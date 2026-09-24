@@ -3,11 +3,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'dart:math';
 import '../../theme/app_theme.dart';
 import '../../core/config.dart';
+import '../../models/address.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/cart_provider.dart';
 import '../../providers/orders_provider.dart';
+import '../../providers/addresses_provider.dart';
+import '../../services/api_service.dart';
+import '../../utils/delivery_estimate.dart';
 
 class CheckoutScreen extends ConsumerStatefulWidget {
   const CheckoutScreen({super.key});
@@ -21,9 +26,19 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   final _addressController = TextEditingController();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _couponController = TextEditingController();
+
   String _paymentMethod = 'razorpay'; // 'razorpay' or 'cod'
   bool _isProcessing = false;
   late Razorpay _razorpay;
+
+  // Coupon state
+  String? _appliedCouponCode;
+  double _appliedDiscountAmount = 0;
+  String? _appliedCouponDescription;
+  bool _isValidatingCoupon = false;
+
+  String? _selectedAddressId;
 
   @override
   void initState() {
@@ -33,10 +48,37 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _onPaymentError);
     _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _onExternalWallet);
 
-    // Pre-fill name from user profile
+    // Pre-fill name, phone, and address from profile and past orders
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final auth = ref.read(authProvider);
-      _nameController.text = auth.fullName;
+      if (_nameController.text.isEmpty && auth.fullName.isNotEmpty) {
+        _nameController.text = auth.fullName;
+      }
+      final addresses = ref.read(addressesProvider).valueOrNull ?? [];
+      if (addresses.isNotEmpty) {
+        final defaultAddr = addresses.firstWhere((a) => a.isDefault, orElse: () => addresses.first);
+        _selectAddress(defaultAddr);
+      } else {
+        final orders = ref.read(ordersProvider).valueOrNull ?? [];
+        if (orders.isNotEmpty) {
+          final lastOrder = orders.first;
+          if (_addressController.text.isEmpty && lastOrder.deliveryAddress.isNotEmpty) {
+            _addressController.text = lastOrder.deliveryAddress;
+          }
+          if (_phoneController.text.isEmpty && lastOrder.customerPhone.isNotEmpty) {
+            _phoneController.text = lastOrder.customerPhone;
+          }
+        } else {
+          final phone = auth.profile?['phone'] as String? ?? '';
+          if (_phoneController.text.isEmpty && phone.isNotEmpty) {
+            _phoneController.text = phone;
+          }
+          final city = auth.profile?['city'] as String? ?? '';
+          if (_addressController.text.isEmpty && city.isNotEmpty) {
+            _addressController.text = city;
+          }
+        }
+      }
     });
   }
 
@@ -46,13 +88,22 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     _addressController.dispose();
     _nameController.dispose();
     _phoneController.dispose();
+    _couponController.dispose();
     super.dispose();
+  }
+
+  void _selectAddress(SavedAddress addr) {
+    setState(() {
+      _selectedAddressId = addr.id;
+      _nameController.text = addr.name;
+      _phoneController.text = addr.phone;
+      _addressController.text = addr.formattedAddress;
+    });
   }
 
   // ─── Razorpay Callbacks ───────────────────────────────────────────────────
 
   void _onPaymentSuccess(PaymentSuccessResponse response) async {
-    // Verify payment on backend
     final pendingOrderId = _pendingOrderId;
     if (pendingOrderId == null) return;
     try {
@@ -78,6 +129,53 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     setState(() => _isProcessing = false);
   }
 
+  // ─── Coupon Validation ────────────────────────────────────────────────────
+
+  Future<void> _applyCoupon(double cartSubtotal) async {
+    final code = _couponController.text.trim().toUpperCase();
+    if (code.isEmpty) return;
+    setState(() => _isValidatingCoupon = true);
+    try {
+      final res = await apiService.post('/coupons/validate', data: {
+        'code': code,
+        'cart_subtotal': cartSubtotal,
+      }) as Map<String, dynamic>;
+      setState(() {
+        _appliedCouponCode = res['code'] as String;
+        _appliedDiscountAmount = (res['discount_amount'] as num).toDouble();
+        _appliedCouponDescription = res['description'] as String?;
+        _isValidatingCoupon = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Coupon "$code" applied! Saved ₹${_appliedDiscountAmount.toInt()} 🎉'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() => _isValidatingCoupon = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceAll('ApiException: ', '')),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  void _removeCoupon() {
+    setState(() {
+      _appliedCouponCode = null;
+      _appliedDiscountAmount = 0;
+      _appliedCouponDescription = null;
+      _couponController.clear();
+    });
+  }
+
   // ─── Order Flow ───────────────────────────────────────────────────────────
 
   String? _pendingOrderId;
@@ -93,24 +191,23 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         customerName: _nameController.text.trim(),
         customerPhone: _phoneController.text.trim(),
         paymentMethod: _paymentMethod,
+        couponCode: _appliedCouponCode,
       );
 
       _pendingOrderId = (result['order'] as Map<String, dynamic>)['id'] as String;
 
       if (_paymentMethod == 'cod') {
-        // COD — order placed immediately
         if (mounted) _showOrderSuccess(_pendingOrderId!);
         return;
       }
 
-      // Launch Razorpay payment sheet
       final razorpayData = result['razorpay'] as Map<String, dynamic>;
       final auth = ref.read(authProvider);
 
       final options = {
         'key': AppConfig.razorpayKeyId,
         'order_id': razorpayData['order_id'],
-        'amount': razorpayData['amount'], // in paise
+        'amount': razorpayData['amount'],
         'currency': razorpayData['currency'] ?? 'INR',
         'name': 'Sheesh — Artisan Marketplace',
         'description': 'Order #${_pendingOrderId?.substring(0, 8)}',
@@ -130,7 +227,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   }
 
   void _showOrderSuccess(String orderId) {
-    ref.read(cartProvider.notifier).fetchCart(); // Refresh cart (it's cleared)
+    ref.read(cartProvider.notifier).fetchCart();
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (_) => _OrderSuccessScreen(orderId: orderId)),
@@ -144,10 +241,123 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     );
   }
 
+  void _showAddAddressSheet() {
+    final nameCtrl = TextEditingController(text: _nameController.text);
+    final phoneCtrl = TextEditingController(text: _phoneController.text);
+    final streetCtrl = TextEditingController();
+    final cityCtrl = TextEditingController(text: 'Moradabad');
+    final pinCtrl = TextEditingController(text: '244001');
+    String label = 'Home';
+    bool isSaving = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Container(
+          padding: EdgeInsets.only(
+            top: 20,
+            left: 20,
+            right: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+          ),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2)),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text('Add New Delivery Address', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 16),
+
+                // Label selector
+                Row(
+                  children: ['Home', 'Work', 'Other'].map((l) {
+                    final isSel = label == l;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label: Text(l, style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600)),
+                        selected: isSel,
+                        selectedColor: AppColors.primary.withValues(alpha: 0.15),
+                        onSelected: (val) => setSheetState(() => label = l),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 12),
+
+                TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Recipient Name')),
+                const SizedBox(height: 10),
+                TextField(controller: phoneCtrl, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Contact Phone')),
+                const SizedBox(height: 10),
+                TextField(controller: streetCtrl, maxLines: 2, decoration: const InputDecoration(labelText: 'Flat / House No. / Street / Colony')),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(child: TextField(controller: cityCtrl, decoration: const InputDecoration(labelText: 'City'))),
+                    const SizedBox(width: 12),
+                    Expanded(child: TextField(controller: pinCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'PIN Code'))),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: isSaving
+                        ? null
+                        : () async {
+                            if (streetCtrl.text.trim().isEmpty) return;
+                            setSheetState(() => isSaving = true);
+                            final created = await ref.read(addressesProvider.notifier).addAddress(
+                              label: label,
+                              name: nameCtrl.text.trim(),
+                              phone: phoneCtrl.text.trim(),
+                              street: streetCtrl.text.trim(),
+                              city: cityCtrl.text.trim(),
+                              postalCode: pinCtrl.text.trim(),
+                              isDefault: true,
+                            );
+                            if (ctx.mounted) Navigator.pop(ctx);
+                            if (created != null) {
+                              _selectAddress(created);
+                            }
+                          },
+                    child: isSaving
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : Text('Save & Deliver Here', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cartState = ref.watch(cartProvider);
     final cartNotifier = ref.read(cartProvider.notifier);
+    final addressesAsync = ref.watch(addressesProvider);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -170,13 +380,120 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           if (items.isEmpty) {
             return const Center(child: Text('Your cart is empty'));
           }
+
+          final effectiveDiscount = max(cartNotifier.discount, _appliedDiscountAmount);
+          final finalTotal = max(0.0, cartNotifier.subtotal + cartNotifier.deliveryFee - effectiveDiscount);
+
           return Form(
             key: _formKey,
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: [
-                // ── Delivery Details ────────────────────────────
-                _sectionTitle('📍 Delivery Details'),
+                // ── Estimated Delivery Banner ───────────────────
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.bolt_rounded, color: AppColors.goldDark, size: 22),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Estimated Arrival: ${DeliveryEstimate.getEstimate()} • Free delivery over ₹999',
+                          style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // ── Saved Address Book ──────────────────────────
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _sectionTitle('📍 Delivery Address'),
+                    TextButton.icon(
+                      onPressed: _showAddAddressSheet,
+                      icon: const Icon(Icons.add_location_alt_outlined, size: 16, color: AppColors.primary),
+                      label: Text('+ Add New', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+
+                addressesAsync.when(
+                  loading: () => const SizedBox.shrink(),
+                  error: (err, stack) => const SizedBox.shrink(),
+                  data: (addresses) {
+                    if (addresses.isEmpty) return const SizedBox.shrink();
+                    return SizedBox(
+                      height: 84,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: addresses.length,
+                        itemBuilder: (ctx, i) {
+                          final addr = addresses[i];
+                          final isSelected = _selectedAddressId == addr.id;
+                          return GestureDetector(
+                            onTap: () => _selectAddress(addr),
+                            child: Container(
+                              width: 220,
+                              margin: const EdgeInsets.only(right: 12, bottom: 4),
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: isSelected ? AppColors.primary : AppColors.border,
+                                  width: isSelected ? 2 : 1,
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primary.withValues(alpha: 0.1),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(addr.label, style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                                      ),
+                                      const Spacer(),
+                                      if (isSelected)
+                                        const Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 16),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    addr.name,
+                                    style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  Text(
+                                    addr.formattedAddress,
+                                    style: GoogleFonts.lato(fontSize: 11, color: AppColors.textSecondary),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    );
+                  },
+                ),
                 const SizedBox(height: 12),
 
                 _field(
@@ -200,6 +517,82 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                   hint: 'House no., street, area, city, pincode',
                   maxLines: 3,
                   validator: (v) => v!.isEmpty ? 'Required' : null,
+                ),
+
+                const SizedBox(height: 28),
+
+                // ── Promo / Coupon Code Section ─────────────────
+                _sectionTitle('🎟️ Apply Coupon / Promo Code'),
+                const SizedBox(height: 12),
+
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _couponController,
+                              textCapitalization: TextCapitalization.characters,
+                              decoration: InputDecoration(
+                                hintText: 'Enter code (e.g. PEETAL10, SHEESH100)',
+                                hintStyle: GoogleFonts.lato(fontSize: 12, color: AppColors.textLight),
+                                border: InputBorder.none,
+                                isDense: true,
+                              ),
+                            ),
+                          ),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            ),
+                            onPressed: _isValidatingCoupon ? null : () => _applyCoupon(cartNotifier.subtotal),
+                            child: _isValidatingCoupon
+                                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                : Text('Apply', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                          ),
+                        ],
+                      ),
+                      if (_appliedCouponCode != null) ...[
+                        const Divider(height: 16),
+                        Row(
+                          children: [
+                            const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 16),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Applied: $_appliedCouponCode (-₹${_appliedDiscountAmount.toInt()})',
+                                    style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.success),
+                                  ),
+                                  if (_appliedCouponDescription != null && _appliedCouponDescription!.isNotEmpty)
+                                    Text(
+                                      _appliedCouponDescription!,
+                                      style: GoogleFonts.lato(fontSize: 11, color: AppColors.textSecondary),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: _removeCoupon,
+                              child: const Icon(Icons.close_rounded, size: 18, color: AppColors.textSecondary),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
 
                 const SizedBox(height: 28),
@@ -246,11 +639,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                               child: item.product.imageUrls.isNotEmpty
                                   ? Image.network(
                                       item.product.imageUrls.first,
-                                      width: 44, height: 44,
+                                      width: 44,
+                                      height: 44,
                                       fit: BoxFit.cover,
                                     )
                                   : Container(
-                                      width: 44, height: 44,
+                                      width: 44,
+                                      height: 44,
                                       color: AppColors.surface,
                                       child: const Icon(Icons.shopping_bag_outlined),
                                     ),
@@ -262,16 +657,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                                 children: [
                                   Text(
                                     item.product.name,
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 13, fontWeight: FontWeight.w500,
-                                    ),
-                                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w500),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                   Text(
                                     'Qty: ${item.quantity}${item.selectedSize != null ? " • ${item.selectedSize}" : ""}',
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 12, color: AppColors.textLight,
-                                    ),
+                                    style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textLight),
                                   ),
                                 ],
                               ),
@@ -291,11 +683,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                         cartNotifier.deliveryFee == 0 ? 'FREE' : '₹${cartNotifier.deliveryFee.toStringAsFixed(0)}',
                         valueColor: cartNotifier.deliveryFee == 0 ? Colors.green : null,
                       ),
-                      if (cartNotifier.discount > 0) ...[
+                      if (effectiveDiscount > 0) ...[
                         const SizedBox(height: 6),
                         _summaryRow(
-                          'Discount',
-                          '-₹${cartNotifier.discount.toStringAsFixed(0)}',
+                          _appliedCouponCode != null ? 'Coupon ($_appliedCouponCode)' : 'Special Discount',
+                          '-₹${effectiveDiscount.toStringAsFixed(0)}',
                           valueColor: Colors.green,
                         ),
                       ],
@@ -306,14 +698,16 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                           Text(
                             'Total Amount',
                             style: GoogleFonts.poppins(
-                              fontSize: 16, fontWeight: FontWeight.w700,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
                               color: AppColors.textDark,
                             ),
                           ),
                           Text(
-                            '₹${cartNotifier.total.toStringAsFixed(0)}',
+                            '₹${finalTotal.toStringAsFixed(0)}',
                             style: GoogleFonts.poppins(
-                              fontSize: 18, fontWeight: FontWeight.w800,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
                               color: AppColors.primary,
                             ),
                           ),
@@ -348,7 +742,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             ),
             child: _isProcessing
                 ? const SizedBox(
-                    width: 24, height: 24,
+                    width: 24,
+                    height: 24,
                     child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
                   )
                 : Text(
@@ -392,7 +787,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           borderRadius: BorderRadius.circular(14),
           borderSide: const BorderSide(color: AppColors.primary, width: 2),
         ),
-        labelStyle: GoogleFonts.poppins(color: AppColors.textLight, fontSize: 14),
+        labelStyle: GoogleFonts.poppins(color: AppColors.textLight, fontSize: 13),
+        hintStyle: GoogleFonts.poppins(color: AppColors.textLight, fontSize: 13),
       ),
     ).animate().fadeIn();
   }
@@ -407,20 +803,23 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     return GestureDetector(
       onTap: () => setState(() => _paymentMethod = value),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
+        duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary.withValues(alpha: 0.06) : Colors.white,
+          color: isSelected ? Colors.white : Colors.white70,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: isSelected ? AppColors.primary : AppColors.border,
             width: isSelected ? 2 : 1,
           ),
+          boxShadow: isSelected
+              ? [BoxShadow(color: AppColors.primary.withValues(alpha: 0.1), blurRadius: 8, offset: const Offset(0, 2))]
+              : [],
         ),
         child: Row(
           children: [
-            Icon(icon, color: isSelected ? AppColors.primary : AppColors.textLight, size: 26),
-            const SizedBox(width: 12),
+            Icon(icon, color: isSelected ? AppColors.primary : AppColors.textLight, size: 28),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -431,41 +830,41 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               ),
             ),
             Icon(
-              isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+              isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
               color: isSelected ? AppColors.primary : AppColors.textLight,
+              size: 22,
             ),
           ],
         ),
       ),
-    );
+    ).animate().fadeIn();
   }
 
-  Widget _summaryRow(String label, String value, {Color? valueColor}) => Row(
-    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-    children: [
-      Text(label, style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textLight)),
-      Text(
-        value,
-        style: GoogleFonts.poppins(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: valueColor ?? AppColors.textDark,
+  Widget _summaryRow(String label, String value, {Color? valueColor}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: GoogleFonts.poppins(color: AppColors.textLight, fontSize: 13)),
+        Text(
+          value,
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13, color: valueColor ?? AppColors.textDark),
         ),
-      ),
-    ],
-  );
+      ],
+    );
+  }
 }
 
 // ─── Order Success Screen ─────────────────────────────────────────────────────
 
 class _OrderSuccessScreen extends StatelessWidget {
   final String orderId;
+
   const _OrderSuccessScreen({required this.orderId});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Colors.white,
       body: SafeArea(
         child: Center(
           child: Padding(
@@ -474,51 +873,55 @@ class _OrderSuccessScreen extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Container(
-                  width: 100, height: 100,
+                  width: 90,
+                  height: 90,
                   decoration: BoxDecoration(
                     color: Colors.green.shade50,
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(Icons.check_circle_rounded, size: 64, color: Colors.green.shade600),
-                )
-                    .animate()
-                    .scale(duration: 600.ms, curve: Curves.elasticOut),
-
-                const SizedBox(height: 28),
-
+                  child: const Icon(Icons.check_rounded, color: Colors.green, size: 52),
+                ).animate().scale(duration: 400.ms, curve: Curves.elasticOut),
+                const SizedBox(height: 24),
                 Text(
                   'Order Placed! 🎉',
-                  style: GoogleFonts.poppins(
-                    fontSize: 26, fontWeight: FontWeight.w700, color: AppColors.textDark,
-                  ),
+                  style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.w700),
                 ).animate().fadeIn(delay: 200.ms),
-
-                const SizedBox(height: 10),
-
+                const SizedBox(height: 8),
                 Text(
-                  'Your artisan has been notified and will start crafting your order with love.',
+                  'Thank you for supporting Moradabad women artisans. Your order has been notified.',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.poppins(fontSize: 14, color: AppColors.textLight),
                 ).animate().fadeIn(delay: 300.ms),
-
+                const SizedBox(height: 24),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.background,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    'Order ID: #${orderId.substring(0, 8).toUpperCase()}',
+                    style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                ).animate().fadeIn(delay: 400.ms),
                 const SizedBox(height: 40),
-
                 SizedBox(
                   width: double.infinity,
                   height: 52,
                   child: ElevatedButton(
-                    onPressed: () => Navigator.popUntil(context, (r) => r.isFirst),
+                    onPressed: () => Navigator.pop(context),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      elevation: 0,
                     ),
                     child: Text(
                       'Continue Shopping',
-                      style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.w600),
+                      style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 15),
                     ),
                   ),
-                ).animate().fadeIn(delay: 400.ms),
+                ).animate().fadeIn(delay: 500.ms),
               ],
             ),
           ),

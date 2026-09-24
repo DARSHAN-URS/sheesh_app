@@ -128,7 +128,7 @@ class SheeshAppBar extends ConsumerWidget implements PreferredSizeWidget {
           ] else
             const Spacer(),
 
-          // Role Switcher Button
+          // Role Switcher Button — toggle between Buyer and Seller Storefront view
           if (showRoleToggle)
             InkWell(
               onTap: () {

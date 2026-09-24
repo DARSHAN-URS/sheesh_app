@@ -6,11 +6,14 @@ import '../../models/product.dart';
 import '../../models/seller.dart';
 import '../../providers/products_provider.dart';
 import '../../providers/cart_provider.dart';
+import '../../providers/reviews_provider.dart';
 import '../../widgets/network_image_fallback.dart';
 import '../../widgets/gradient_button.dart';
 import 'seller_storefront_screen.dart';
 import 'cart_screen.dart';
 import 'checkout_screen.dart';
+import '../../utils/whatsapp_helper.dart';
+import '../../utils/delivery_estimate.dart';
 
 class ProductDetailScreen extends ConsumerStatefulWidget {
   final String productId;
@@ -292,10 +295,43 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                         style: GoogleFonts.lato(fontSize: 11, color: AppColors.textSecondary),
                       ),
 
+                      const SizedBox(height: 12),
+
+                      // Dynamic Delivery Estimation Badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.local_shipping_outlined, color: AppColors.accentTeal, size: 22),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Estimated Delivery: ${DeliveryEstimate.getEstimate()}',
+                                    style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textDark),
+                                  ),
+                                  Text(
+                                    DeliveryEstimate.getDispatchCountdown(),
+                                    style: GoogleFonts.lato(fontSize: 11, color: AppColors.success, fontWeight: FontWeight.w600),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
                       const SizedBox(height: 20),
 
                       // Seller Profile Spotlight Card
-                      if (seller != null)
+                      if (seller != null) ...[
                         GestureDetector(
                           onTap: () {
                             Navigator.of(context).push(
@@ -382,6 +418,38 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                             ),
                           ),
                         ),
+
+                        // WhatsApp Artisan Direct Inquiry
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFF25D366), width: 1.5),
+                              padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              backgroundColor: const Color(0xFF25D366).withValues(alpha: 0.07),
+                            ),
+                            icon: const Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFF128C7E), size: 18),
+                            label: Text(
+                              'Chat with Artisan on WhatsApp 💬',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: const Color(0xFF128C7E),
+                              ),
+                            ),
+                            onPressed: () {
+                              WhatsAppHelper.openArtisanChat(
+                                phoneNumber: seller.phoneNumber,
+                                artisanName: seller.name,
+                                productName: product.name,
+                                productPrice: product.price,
+                              );
+                            },
+                          ),
+                        ),
+                      ],
 
                       const SizedBox(height: 20),
 
@@ -546,65 +614,138 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
 
                       const SizedBox(height: 24),
 
-                      // Reviews Summary
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: AppColors.border),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      // Reviews Summary (live from API)
+                      Builder(
+                        builder: (context) {
+                          final reviewsAsync = ref.watch(productReviewsProvider(product.id));
+                          return Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: AppColors.border),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  'Moradabad Buyer Reviews',
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.textPrimary,
-                                  ),
-                                ),
                                 Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    const Icon(Icons.star_rounded, color: AppColors.gold, size: 18),
-                                    const SizedBox(width: 3),
                                     Text(
-                                      '${product.rating} (${product.reviewsCount})',
+                                      'Buyer Reviews',
                                       style: GoogleFonts.poppins(
-                                        fontSize: 13,
+                                        fontSize: 14,
                                         fontWeight: FontWeight.bold,
                                         color: AppColors.textPrimary,
                                       ),
                                     ),
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.star_rounded, color: AppColors.gold, size: 18),
+                                        const SizedBox(width: 3),
+                                        Text(
+                                          '${product.rating} (${product.reviewsCount})',
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.textPrimary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ],
+                                ),
+                                const Divider(height: 20),
+                                reviewsAsync.when(
+                                  loading: () => const Center(
+                                    child: Padding(
+                                      padding: EdgeInsets.all(12),
+                                      child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2),
+                                    ),
+                                  ),
+                                  error: (err, st) => Text(
+                                    'Could not load reviews.',
+                                    style: GoogleFonts.lato(fontSize: 12, color: AppColors.textSecondary),
+                                  ),
+                                  data: (reviews) {
+                                    if (reviews.isEmpty) {
+                                      return Column(
+                                        children: [
+                                          const Icon(Icons.rate_review_outlined, color: AppColors.border, size: 36),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            'No reviews yet — be the first!',
+                                            style: GoogleFonts.lato(fontSize: 12, color: AppColors.textSecondary),
+                                          ),
+                                        ],
+                                      );
+                                    }
+                                    final display = reviews.take(3).toList();
+                                    return Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: display.map((r) {
+                                        final userName = (r['users']?['full_name'] as String?) ?? 'Anonymous';
+                                        final city = (r['users']?['city'] as String?) ?? '';
+                                        final rating = (r['rating'] as num?)?.toInt() ?? 5;
+                                        final comment = (r['comment'] as String?) ?? '';
+                                        final title = (r['title'] as String?) ?? '';
+                                        return Padding(
+                                          padding: const EdgeInsets.only(bottom: 14),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Row(
+                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                children: [
+                                                  Text(
+                                                    userName,
+                                                    style: GoogleFonts.poppins(
+                                                      fontSize: 12,
+                                                      fontWeight: FontWeight.w600,
+                                                      color: AppColors.goldDark,
+                                                    ),
+                                                  ),
+                                                  Row(
+                                                    children: List.generate(5, (i) => Icon(
+                                                      i < rating ? Icons.star_rounded : Icons.star_border_rounded,
+                                                      color: AppColors.gold,
+                                                      size: 13,
+                                                    )),
+                                                  ),
+                                                ],
+                                              ),
+                                              if (city.isNotEmpty)
+                                                Text(
+                                                  city,
+                                                  style: GoogleFonts.lato(fontSize: 10, color: AppColors.textSecondary),
+                                                ),
+                                              if (title.isNotEmpty) ...[
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  title,
+                                                  style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                                                ),
+                                              ],
+                                              if (comment.isNotEmpty) ...[
+                                                const SizedBox(height: 3),
+                                                Text(
+                                                  '"$comment"',
+                                                  style: GoogleFonts.lato(fontSize: 12, fontStyle: FontStyle.italic, color: AppColors.textSecondary, height: 1.4),
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        );
+                                      }).toList(),
+                                    );
+                                  },
                                 ),
                               ],
                             ),
-                            const Divider(height: 20),
-                            Text(
-                              '"The finish is extraordinary! You can tell real Moradabad brass artisans made this with love. Fast delivery too."',
-                              style: GoogleFonts.lato(
-                                fontSize: 12,
-                                fontStyle: FontStyle.italic,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '- Tanya S., Civil Lines Moradabad (Verified Buyer ✓)',
-                              style: GoogleFonts.poppins(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.goldDark,
-                              ),
-                            ),
-                          ],
-                        ),
+                          );
+                        },
                       ),
+
                     ],
                   ),
                 ),
