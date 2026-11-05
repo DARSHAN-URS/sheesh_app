@@ -26,6 +26,22 @@ class OrdersNotifier extends StateNotifier<AsyncValue<List<OrderModel>>> {
         state = const AsyncValue.data([]);
       }
     } catch (e, st) {
+      // Direct Supabase fallback
+      try {
+        final userId = SupabaseService.currentUser?.id;
+        if (userId != null) {
+          final res = await SupabaseService.client
+              .from('orders')
+              .select('*, order_items(*)')
+              .eq('buyer_id', userId)
+              .order('created_at', ascending: false);
+          if (res is List) {
+            final orders = (res as List).map((e) => OrderModel.fromJson(e as Map<String, dynamic>)).toList();
+            state = AsyncValue.data(orders);
+            return;
+          }
+        }
+      } catch (_) {}
       state = AsyncValue.error(e, st);
     }
   }
@@ -70,9 +86,19 @@ class OrdersNotifier extends StateNotifier<AsyncValue<List<OrderModel>>> {
 
   /// Cancel an order (for buyer)
   Future<void> cancelOrder(String orderId, {String? reason}) async {
-    await apiService.post('/orders/$orderId/cancel', data: {
-      if (reason != null && reason.isNotEmpty) 'reason': reason,
-    });
+    try {
+      await apiService.post('/orders/$orderId/cancel', data: {
+        if (reason != null && reason.isNotEmpty) 'reason': reason,
+      });
+    } catch (_) {
+      try {
+        final updateData = {
+          'status': 'cancelled',
+          'tracking_note': 'Order cancelled by buyer${reason != null ? ": $reason" : ""}',
+        };
+        await SupabaseService.client.from('orders').update(updateData).eq('id', orderId);
+      } catch (_) {}
+    }
     await fetch(); // Refresh orders list
   }
 
@@ -136,6 +162,37 @@ class SellerOrdersNotifier extends StateNotifier<AsyncValue<List<OrderModel>>> {
         state = const AsyncValue.data([]);
       }
     } catch (e, st) {
+      // Direct Supabase fallback for seller orders
+      try {
+        final userId = SupabaseService.currentUser?.id;
+        if (userId != null) {
+          final sellerRes = await SupabaseService.client
+              .from('sellers')
+              .select('id')
+              .eq('user_id', userId)
+              .maybeSingle();
+          if (sellerRes != null && sellerRes['id'] != null) {
+            final sellerId = sellerRes['id'] as String;
+            final itemsRes = await SupabaseService.client
+                .from('order_items')
+                .select('order_id')
+                .eq('seller_id', sellerId);
+            if (itemsRes is List && itemsRes.isNotEmpty) {
+              final orderIds = (itemsRes as List).map((i) => i['order_id'] as String).toSet().toList();
+              final ordersRes = await SupabaseService.client
+                  .from('orders')
+                  .select('*, order_items(*)')
+                  .inFilter('id', orderIds)
+                  .order('created_at', ascending: false);
+              if (ordersRes is List) {
+                final orders = (ordersRes as List).map((e) => OrderModel.fromJson(e as Map<String, dynamic>)).toList();
+                state = AsyncValue.data(orders);
+                return;
+              }
+            }
+          }
+        }
+      } catch (_) {}
       state = AsyncValue.error(e, st);
     }
   }
@@ -147,7 +204,15 @@ class SellerOrdersNotifier extends StateNotifier<AsyncValue<List<OrderModel>>> {
   }) async {
     final data = <String, dynamic>{'status': newStatus};
     if (trackingNote != null) data['tracking_note'] = trackingNote;
-    await apiService.put('/orders/$orderId/status', data: data);
+    try {
+      await apiService.put('/orders/$orderId/status', data: data);
+    } catch (_) {
+      try {
+        final updateData = <String, dynamic>{'status': newStatus};
+        if (trackingNote != null) updateData['tracking_note'] = trackingNote;
+        await SupabaseService.client.from('orders').update(updateData).eq('id', orderId);
+      } catch (_) {}
+    }
     await fetch();
   }
 }

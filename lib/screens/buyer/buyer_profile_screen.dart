@@ -9,6 +9,7 @@ import '../../widgets/sheesh_app_bar.dart';
 import 'cart_screen.dart';
 import 'orders_screen.dart';
 import 'order_tracking_screen.dart';
+import 'store_map_screen.dart';
 import 'dart:io';
 import '../auth/login_screen.dart';
 import '../../models/seller.dart';
@@ -485,52 +486,24 @@ class BuyerProfileScreen extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.goldDark,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            elevation: 0,
-                          ),
-                          onPressed: () {
-                            if (auth.sellerProfile != null) {
-                              ref.read(isSellerModeProvider.notifier).state = true;
-                            } else {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (_) => const SellerOnboardingScreen()),
-                              );
-                            }
-                          },
-                          child: Text(
-                            auth.sellerProfile != null ? 'View Seller Side 🏪' : 'Become a Seller 🚀',
-                            style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.textPrimary,
-                            side: const BorderSide(color: AppColors.border),
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => const SellerOnboardingScreen()),
-                            );
-                          },
-                          child: Text(
-                            'Seller Onboarding ✨',
-                            style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                      ],
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.goldDark,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        elevation: 0,
+                      ),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const SellerOnboardingScreen()),
+                        );
+                      },
+                      child: Text(
+                        'Become a Seller 🚀',
+                        style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
                     ),
                   ],
                 ),
@@ -550,6 +523,19 @@ class BuyerProfileScreen extends ConsumerWidget {
                 clipBehavior: Clip.antiAlias,
                 child: Column(
                   children: [
+                  _buildMenuTile(
+                    icon: Icons.explore_rounded,
+                    title: 'Moradabad Artisan Map 📍',
+                    subtitle: 'Explore stores & workshops in Peetal Mandi, Civil Lines & Sambhal Rd',
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const StoreMapScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  const Divider(height: 1, indent: 56, endIndent: 16, color: AppColors.border),
                   _buildMenuTile(
                     icon: Icons.map_outlined,
                     title: 'Live Order Tracking 🚚',

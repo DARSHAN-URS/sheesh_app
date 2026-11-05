@@ -11,6 +11,7 @@ import '../../widgets/festival_offers_carousel.dart';
 import '../../widgets/artisan_of_the_week_card.dart';
 import '../../widgets/personalized_picks_section.dart';
 import 'search_screen.dart';
+import 'store_map_screen.dart';
 
 class BuyerHomeScreen extends ConsumerWidget {
   const BuyerHomeScreen({super.key});
@@ -81,18 +82,32 @@ class BuyerHomeScreen extends ConsumerWidget {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: AppColors.gold.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            '📍 Moradabad',
-                            style: GoogleFonts.poppins(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.goldDark,
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => const StoreMapScreen()),
+                            );
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppColors.gold.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  '📍 Moradabad',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.goldDark,
+                                  ),
+                                ),
+                                const SizedBox(width: 3),
+                                const Icon(Icons.map_outlined, size: 11, color: AppColors.goldDark),
+                              ],
                             ),
                           ),
                         ),
@@ -214,6 +229,107 @@ class BuyerHomeScreen extends ConsumerWidget {
                     ),
                   ),
                   error: (error, stack) => const SizedBox.shrink(),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // ── Interactive Moradabad Artisan Map Banner ──
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: GestureDetector(
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const StoreMapScreen()),
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF5A1629), Color(0xFF330914)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: AppColors.gold.withValues(alpha: 0.35), width: 1.0),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF5A1629).withValues(alpha: 0.25),
+                          blurRadius: 14,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: AppColors.gold.withValues(alpha: 0.4), width: 1.0),
+                          ),
+                          child: const Center(
+                            child: Icon(Icons.explore_rounded, color: AppColors.gold, size: 26),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(
+                                    'Explore Stores on Map',
+                                    style: GoogleFonts.playfairDisplay(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF2A7B54),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      'LIVE GPS',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 8.5,
+                                        fontWeight: FontWeight.w800,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Browse artisan workshops in Peetal Mandi, Civil Lines & Sambhal Rd',
+                                style: GoogleFonts.lato(fontSize: 11, color: Colors.white70),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: AppColors.gold.withValues(alpha: 0.2),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.arrow_forward_ios_rounded, color: AppColors.gold, size: 12),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
 

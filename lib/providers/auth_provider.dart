@@ -22,7 +22,7 @@ class AuthState {
   });
 
   bool get isAuthenticated => supabaseUser != null;
-  bool get isSeller => profile?['is_seller'] == true;
+  bool get isSeller => (profile?['is_seller'] == true) || (sellerProfile != null);
   bool get isSellerMode => false; // managed by app mode state
 
   /// Full name resolved from database profile, Google user metadata, or email fallback
@@ -118,7 +118,8 @@ class AuthState {
 // ─── Auth Notifier ─────────────────────────────────────────────────────────────
 
 class AuthNotifier extends StateNotifier<AuthState> {
-  AuthNotifier() : super(const AuthState(isLoading: true)) {
+  final Ref? _ref;
+  AuthNotifier([this._ref]) : super(const AuthState(isLoading: true)) {
     _init();
   }
 
@@ -150,6 +151,27 @@ class AuthNotifier extends StateNotifier<AuthState> {
       Seller? seller;
       if (sellersData != null && sellersData is List && sellersData.isNotEmpty) {
         seller = Seller.fromJson(sellersData[0] as Map<String, dynamic>);
+      }
+
+      // If backend join returned no seller, query Supabase sellers table directly
+      if (seller == null) {
+        try {
+          final sRes = await SupabaseService.client
+              .from('sellers')
+              .select('*')
+              .eq('user_id', user.id)
+              .maybeSingle();
+          if (sRes != null && sRes is Map<String, dynamic>) {
+            final sMap = Map<String, dynamic>.from(sRes);
+            if (!sMap.containsKey('users')) {
+              sMap['users'] = {'full_name': profile['full_name'] ?? user.userMetadata?['full_name']};
+            }
+            seller = Seller.fromJson(sMap);
+            profile['is_seller'] = true;
+          }
+        } catch (_) {}
+      } else {
+        profile['is_seller'] = true;
       }
 
       // Check if Google metadata has profile information that needs syncing to database
@@ -192,29 +214,46 @@ class AuthNotifier extends StateNotifier<AuthState> {
         state = const AuthState();
         return;
       }
-      // Fallback: load directly from Supabase DB if backend network delay
+      // Fallback: load directly from Supabase DB (users + sellers tables)
       try {
-        final res = await SupabaseService.client
+        final userRes = await SupabaseService.client
             .from('users')
-            .select('*, sellers(*)')
+            .select('*')
             .eq('id', user.id)
             .maybeSingle();
-        if (res != null) {
-          final profile = Map<String, dynamic>.from(res);
-          final sellersData = profile['sellers'];
-          Seller? seller;
-          if (sellersData != null && sellersData is List && sellersData.isNotEmpty) {
-            seller = Seller.fromJson(sellersData[0] as Map<String, dynamic>);
+
+        final sellerRes = await SupabaseService.client
+            .from('sellers')
+            .select('*')
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+        final profile = userRes != null
+            ? Map<String, dynamic>.from(userRes)
+            : <String, dynamic>{
+                'id': user.id,
+                'email': user.email,
+                'full_name': user.userMetadata?['full_name'] ?? 'User',
+              };
+
+        Seller? seller;
+        if (sellerRes != null && sellerRes is Map<String, dynamic>) {
+          final sMap = Map<String, dynamic>.from(sellerRes);
+          if (!sMap.containsKey('users')) {
+            sMap['users'] = {'full_name': profile['full_name']};
           }
-          state = state.copyWith(
-            supabaseUser: user,
-            profile: profile,
-            sellerProfile: seller,
-            isLoading: false,
-            clearError: true,
-          );
-          return;
+          seller = Seller.fromJson(sMap);
+          profile['is_seller'] = true;
         }
+
+        state = state.copyWith(
+          supabaseUser: user,
+          profile: profile,
+          sellerProfile: seller,
+          isLoading: false,
+          clearError: true,
+        );
+        return;
       } catch (_) {}
       state = state.copyWith(
         supabaseUser: user,
@@ -315,6 +354,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> signOut() async {
     await SupabaseService.signOut();
+    if (_ref != null) {
+      _ref!.read(isSellerModeProvider.notifier).state = false;
+    }
     state = const AuthState();
   }
 
@@ -703,7 +745,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 // ─── Providers ────────────────────────────────────────────────────────────────
 
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
-  return AuthNotifier();
+  return AuthNotifier(ref);
 });
 
 // App mode provider: true = seller mode, false = buyer mode

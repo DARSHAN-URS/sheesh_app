@@ -47,7 +47,9 @@ class SellerHomeScreen extends ConsumerWidget {
           phoneNumber: auth.supabaseUser?.phone ?? '',
         );
 
-    final sellerOrders = ref.watch(sellerOrdersProvider).value ?? [];
+    final sellerOrders = ref.watch(sellerOrdersNotifierProvider).value ??
+        ref.watch(sellerOrdersProvider).value ??
+        [];
     final realSellerId = auth.sellerProfile?.id ?? '';
     final sellerProducts = realSellerId.isNotEmpty
         ? (ref.watch(sellerProductsProvider(realSellerId)).value ?? [])
@@ -73,9 +75,11 @@ class SellerHomeScreen extends ConsumerWidget {
         child: RefreshIndicator(
           onRefresh: () async {
             ref.invalidate(sellerOrdersProvider);
+            ref.read(sellerOrdersNotifierProvider.notifier).fetch();
             if (realSellerId.isNotEmpty) {
               ref.invalidate(sellerProductsProvider(realSellerId));
             }
+            await ref.read(authProvider.notifier).refreshProfile();
           },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),

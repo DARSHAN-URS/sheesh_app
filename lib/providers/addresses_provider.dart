@@ -24,6 +24,21 @@ class AddressesNotifier extends StateNotifier<AsyncValue<List<SavedAddress>>> {
         state = const AsyncValue.data([]);
       }
     } catch (_) {
+      try {
+        final userId = SupabaseService.currentUser?.id;
+        if (userId != null) {
+          final res = await SupabaseService.client
+              .from('addresses')
+              .select('*')
+              .eq('user_id', userId)
+              .order('is_default', ascending: false);
+          if (res is List && res.isNotEmpty) {
+            final list = res.map((e) => SavedAddress.fromJson(e as Map<String, dynamic>)).toList();
+            state = AsyncValue.data(list.take(maxAddresses).toList());
+            return;
+          }
+        }
+      } catch (_) {}
       // Keep existing data on transient network error, or empty list
       if (!state.hasValue) {
         state = const AsyncValue.data([]);
@@ -149,6 +164,13 @@ class AddressesNotifier extends StateNotifier<AsyncValue<List<SavedAddress>>> {
       await apiService.patch('/addresses/$addressId/default');
       await fetch();
     } catch (_) {
+      try {
+        final userId = SupabaseService.currentUser?.id;
+        if (userId != null) {
+          await SupabaseService.client.from('addresses').update({'is_default': false}).eq('user_id', userId);
+          await SupabaseService.client.from('addresses').update({'is_default': true}).eq('id', addressId);
+        }
+      } catch (_) {}
       final currentList = state.valueOrNull ?? [];
       final updated = currentList.map((a) => a.copyWith(isDefault: a.id == addressId)).toList();
       state = AsyncValue.data(updated);
@@ -160,6 +182,9 @@ class AddressesNotifier extends StateNotifier<AsyncValue<List<SavedAddress>>> {
       await apiService.delete('/addresses/$addressId');
       await fetch();
     } catch (_) {
+      try {
+        await SupabaseService.client.from('addresses').delete().eq('id', addressId);
+      } catch (_) {}
       final currentList = state.valueOrNull ?? [];
       final filtered = currentList.where((a) => a.id != addressId).toList();
       if (filtered.isNotEmpty && !filtered.any((a) => a.isDefault)) {

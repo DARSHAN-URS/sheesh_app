@@ -118,21 +118,52 @@ final productsProvider =
 // Featured products for home screen carousel
 final featuredProductsProvider = FutureProvider<List<Product>>((ref) async {
   try {
-    final data = await apiService.get('/products/featured') as List<dynamic>;
-    return data.map((e) => Product.fromJson(e as Map<String, dynamic>)).toList();
-  } catch (_) {
-    return [];
-  }
+    final data = await apiService.get('/products/featured');
+    if (data is List) {
+      return data.map((e) => Product.fromJson(e as Map<String, dynamic>)).toList();
+    }
+  } catch (_) {}
+
+  // Direct Supabase fallback
+  try {
+    final res = await SupabaseService.client
+        .from('products')
+        .select('*, product_images(url, sort_order), sellers(store_name, location, is_verified)')
+        .eq('is_featured', true)
+        .limit(10);
+    if (res is List && res.isNotEmpty) {
+      return (res as List).map((e) => Product.fromJson(e as Map<String, dynamic>)).toList();
+    }
+  } catch (_) {}
+
+  // Fallback to active catalog
+  final all = ref.watch(productsProvider).valueOrNull ?? [];
+  return all.take(10).toList();
 });
 
 // Single product detail
 final productDetailProvider = FutureProvider.family<Product?, String>((ref, id) async {
+  if (id.isEmpty) return null;
   try {
     final data = await apiService.get('/products/$id');
     return Product.fromJson(data as Map<String, dynamic>);
-  } catch (_) {
-    return null;
-  }
+  } catch (_) {}
+
+  // Direct Supabase fallback
+  try {
+    final res = await SupabaseService.client
+        .from('products')
+        .select('*, product_images(url, sort_order), sellers(store_name, location, is_verified)')
+        .eq('id', id)
+        .maybeSingle();
+    if (res != null) {
+      return Product.fromJson(res);
+    }
+  } catch (_) {}
+
+  // Secondary fallback: check productsProvider cache
+  final all = ref.watch(productsProvider).valueOrNull ?? [];
+  return all.where((p) => p.id == id).firstOrNull;
 });
 
 // ─── Sellers ──────────────────────────────────────────────────────────────────
@@ -185,12 +216,27 @@ final featuredSellersProvider = FutureProvider<List<Seller>>((ref) async {
 });
 
 final sellerDetailProvider = FutureProvider.family<Seller?, String>((ref, id) async {
+  if (id.isEmpty) return null;
   try {
     final data = await apiService.get('/sellers/$id');
     return Seller.fromJson(data as Map<String, dynamic>);
-  } catch (_) {
-    return null;
-  }
+  } catch (_) {}
+
+  // Direct Supabase fallback
+  try {
+    final res = await SupabaseService.client
+        .from('sellers')
+        .select('*, users(full_name, avatar_url)')
+        .eq('id', id)
+        .maybeSingle();
+    if (res != null) {
+      return Seller.fromJson(res);
+    }
+  } catch (_) {}
+
+  // Check allSellersProvider cache
+  final all = ref.watch(allSellersProvider).valueOrNull ?? [];
+  return all.where((s) => s.id == id).firstOrNull;
 });
 
 final sellerProductsProvider = FutureProvider.family<List<Product>, String>((ref, sellerId) async {
@@ -200,10 +246,21 @@ final sellerProductsProvider = FutureProvider.family<List<Product>, String>((ref
     if (data is List) {
       return data.map((e) => Product.fromJson(e as Map<String, dynamic>)).toList();
     }
-    return [];
-  } catch (_) {
-    return [];
-  }
+  } catch (_) {}
+
+  // Direct Supabase fallback
+  try {
+    final res = await SupabaseService.client
+        .from('products')
+        .select('*, product_images(url, sort_order), sellers(store_name, location, is_verified)')
+        .eq('seller_id', sellerId)
+        .order('created_at', ascending: false);
+    if (res is List) {
+      return (res as List).map((e) => Product.fromJson(e as Map<String, dynamic>)).toList();
+    }
+  } catch (_) {}
+
+  return [];
 });
 
 // ─── Search ───────────────────────────────────────────────────────────────────
@@ -211,14 +268,28 @@ final sellerProductsProvider = FutureProvider.family<List<Product>, String>((ref
 final searchQueryProvider = StateProvider<String>((ref) => '');
 
 final searchResultsProvider = FutureProvider<List<Product>>((ref) async {
-  final query = ref.watch(searchQueryProvider);
+  final query = ref.watch(searchQueryProvider).trim();
   if (query.isEmpty) return [];
   try {
     final data = await apiService.get('/products', params: {'search': query}) as Map<String, dynamic>;
     return (data['data'] as List<dynamic>).map((e) => Product.fromJson(e as Map<String, dynamic>)).toList();
-  } catch (_) {
-    return [];
-  }
+  } catch (_) {}
+
+  // Direct Supabase fallback
+  try {
+    final res = await SupabaseService.client
+        .from('products')
+        .select('*, product_images(url, sort_order), sellers(store_name, location, is_verified)')
+        .ilike('name', '%$query%')
+        .limit(30);
+    if (res is List && res.isNotEmpty) {
+      return (res as List).map((e) => Product.fromJson(e as Map<String, dynamic>)).toList();
+    }
+  } catch (_) {}
+
+  // In-memory fallback
+  final all = ref.watch(productsProvider).valueOrNull ?? [];
+  return all.where((p) => p.name.toLowerCase().contains(query.toLowerCase()) || p.description.toLowerCase().contains(query.toLowerCase())).toList();
 });
 
 // ─── Artisan of the Week ──────────────────────────────────────────────────────

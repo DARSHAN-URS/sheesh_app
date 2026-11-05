@@ -7,6 +7,7 @@ import '../../models/product.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/products_provider.dart';
 import '../../services/api_service.dart';
+import '../../services/supabase_service.dart';
 import '../../widgets/sheesh_app_bar.dart';
 import '../../widgets/network_image_fallback.dart';
 import 'add_product_screen.dart';
@@ -253,7 +254,17 @@ class SellerProductsScreen extends ConsumerWidget {
                                             if (sellerId.isNotEmpty) {
                                               ref.invalidate(sellerProductsProvider(sellerId));
                                             }
-                                          } catch (_) {}
+                                          } catch (_) {
+                                            try {
+                                              await SupabaseService.client
+                                                  .from('products')
+                                                  .update({'in_stock': val})
+                                                  .eq('id', product.id);
+                                              if (sellerId.isNotEmpty) {
+                                                ref.invalidate(sellerProductsProvider(sellerId));
+                                              }
+                                            } catch (_) {}
+                                          }
                                         },
                                       ),
                                     ),
@@ -410,8 +421,27 @@ class SellerProductsScreen extends ConsumerWidget {
             ),
             onPressed: () async {
               Navigator.pop(ctx);
+              bool deleted = false;
               try {
                 await apiService.delete('/products/${product.id}');
+                deleted = true;
+              } catch (_) {
+                try {
+                  await SupabaseService.client
+                      .from('products')
+                      .delete()
+                      .eq('id', product.id);
+                  deleted = true;
+                } catch (err) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Failed to delete: $err')),
+                    );
+                  }
+                }
+              }
+
+              if (deleted) {
                 if (sellerId.isNotEmpty) {
                   ref.invalidate(sellerProductsProvider(sellerId));
                 }
@@ -421,12 +451,6 @@ class SellerProductsScreen extends ConsumerWidget {
                       content: Text('Product deleted successfully'),
                       backgroundColor: AppColors.error,
                     ),
-                  );
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed to delete: $e')),
                   );
                 }
               }

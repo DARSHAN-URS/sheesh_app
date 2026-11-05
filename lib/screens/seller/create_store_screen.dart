@@ -168,8 +168,8 @@ class _CreateStoreScreenState extends ConsumerState<CreateStoreScreen> {
   void initState() {
     super.initState();
     _currentStep = widget.initialStep;
-    final seller = widget.existingSeller;
     final auth = ref.read(authProvider);
+    final seller = widget.existingSeller ?? auth.sellerProfile;
 
     final bool hasRealSeller = seller != null &&
         seller.id.isNotEmpty &&

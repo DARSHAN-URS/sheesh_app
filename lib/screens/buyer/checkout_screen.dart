@@ -234,7 +234,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   }
 
   void _showOrderSuccess(String orderId) {
-    ref.read(cartProvider.notifier).fetchCart();
+    ref.read(cartProvider.notifier).clearCart();
+    ref.read(ordersProvider.notifier).fetch();
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (_) => _OrderSuccessScreen(orderId: orderId)),

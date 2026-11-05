@@ -10,6 +10,7 @@ import '../../widgets/product_card.dart';
 import '../../utils/whatsapp_helper.dart';
 import '../../utils/share_helper.dart';
 import '../../services/api_service.dart';
+import 'store_map_screen.dart';
 
 class SellerStorefrontScreen extends ConsumerStatefulWidget {
   final String sellerId;
@@ -40,10 +41,12 @@ class _SellerStorefrontScreenState extends ConsumerState<SellerStorefrontScreen>
 
   @override
   Widget build(BuildContext context) {
+    final allSellers = ref.watch(allSellersProvider).value ?? [];
+    final sellerFromAll = allSellers.where((s) => s.id == widget.sellerId).firstOrNull;
     final featuredSellers = ref.watch(featuredSellersProvider).value ?? [];
     final sellerFromFeatured = featuredSellers.where((s) => s.id == widget.sellerId).firstOrNull;
     final sellerDetail = ref.watch(sellerDetailProvider(widget.sellerId)).value;
-    final Seller? seller = sellerDetail ?? sellerFromFeatured;
+    final Seller? seller = sellerDetail ?? sellerFromFeatured ?? sellerFromAll;
 
     if (seller == null) {
       return Scaffold(
@@ -251,6 +254,26 @@ class _SellerStorefrontScreenState extends ConsumerState<SellerStorefrontScreen>
                               SnackBar(
                                 content: Text('Calling ${seller.name} at ${seller.phoneNumber}...'),
                                 backgroundColor: AppColors.primaryDark,
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+                            side: const BorderSide(color: AppColors.goldDark),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          icon: const Icon(Icons.pin_drop_rounded, size: 16, color: AppColors.goldDark),
+                          label: Text(
+                            'Map',
+                            style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.goldDark),
+                          ),
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => StoreMapScreen(highlightSellerId: seller.id),
                               ),
                             );
                           },

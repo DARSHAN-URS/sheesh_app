@@ -12,6 +12,7 @@ import '../../providers/orders_provider.dart';
 import '../../widgets/sheesh_app_bar.dart';
 import '../../widgets/network_image_fallback.dart';
 import 'order_detail_screen.dart';
+import 'store_map_screen.dart';
 
 class OrderTrackingScreen extends ConsumerStatefulWidget {
   final OrderModel? order;
@@ -439,6 +440,52 @@ class _OrderTrackingScreenState extends ConsumerState<OrderTrackingScreen> with 
                   ),
                 ),
               ],
+            ),
+          ),
+
+          // Action: Open Full Artisan Map
+          Positioned(
+            bottom: 8,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: GestureDetector(
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const StoreMapScreen()),
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF5A1629).withValues(alpha: 0.88),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFFC89B3C).withValues(alpha: 0.6), width: 0.8),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.2),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.explore_rounded, size: 12, color: Color(0xFFC89B3C)),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Explore Artisan Stores on Map 📍',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
         ],

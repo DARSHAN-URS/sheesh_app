@@ -13,6 +13,7 @@ import '../../providers/auth_provider.dart';
 import '../../widgets/network_image_fallback.dart';
 import 'seller_storefront_screen.dart';
 import 'category_screen.dart';
+import 'store_map_screen.dart';
 
 /// Alias for ArtisanMapScreen
 typedef ArtisanMapScreen = ArtisanSnapMapScreen;
@@ -210,7 +211,10 @@ class _ArtisanSnapMapScreenState extends ConsumerState<ArtisanSnapMapScreen> wit
 
   @override
   Widget build(BuildContext context) {
-    final auth = ref.watch(authProvider);
+    return const StoreMapScreen();
+  }
+
+  Widget _buildLegacyMap(BuildContext context) {
     final userAvatar = auth.avatarUrl;
     final userName = auth.fullName.isNotEmpty ? auth.fullName : 'You';
 

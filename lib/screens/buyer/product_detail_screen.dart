@@ -869,6 +869,24 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                                     );
                                   },
                                 ),
+                                const SizedBox(height: 12),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: OutlinedButton.icon(
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: AppColors.primary,
+                                      side: const BorderSide(color: AppColors.primary),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      padding: const EdgeInsets.symmetric(vertical: 9),
+                                    ),
+                                    icon: const Icon(Icons.rate_review_outlined, size: 16),
+                                    label: Text(
+                                      'Rate & Review this Craft ⭐',
+                                      style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold),
+                                    ),
+                                    onPressed: () => _showWriteReviewSheet(context, product.id),
+                                  ),
+                                ),
                               ],
                             ),
                           );
@@ -1038,6 +1056,164 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  void _showWriteReviewSheet(BuildContext context, String productId) {
+    int rating = 5;
+    final commentCtrl = TextEditingController();
+    final titleCtrl = TextEditingController();
+    bool isSubmitting = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (sheetCtx, setModalState) {
+          return Container(
+            padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 20,
+              bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 24,
+            ),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Write a Review ✍️',
+                    style: GoogleFonts.playfairDisplay(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Share your experience with this Moradabad handcrafted piece.',
+                    style: GoogleFonts.plusJakartaSans(fontSize: 12, color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(5, (index) {
+                      final starIndex = index + 1;
+                      return IconButton(
+                        iconSize: 32,
+                        icon: Icon(
+                          starIndex <= rating ? Icons.star_rounded : Icons.star_border_rounded,
+                          color: AppColors.gold,
+                        ),
+                        onPressed: () => setModalState(() => rating = starIndex),
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: titleCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'Review Headline (optional)',
+                      hintText: 'e.g. Exquisite brass craft & finish!',
+                      filled: true,
+                      fillColor: const Color(0xFFFAF3EC),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Color(0xFFEEDCD4)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: commentCtrl,
+                    maxLines: 3,
+                    decoration: InputDecoration(
+                      labelText: 'Your Review',
+                      hintText: 'Tell other buyers about the authenticity, material quality and craft...',
+                      filled: true,
+                      fillColor: const Color(0xFFFAF3EC),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Color(0xFFEEDCD4)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: isSubmitting
+                          ? null
+                          : () async {
+                              if (commentCtrl.text.trim().isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Please write a brief comment.')),
+                                );
+                                return;
+                              }
+                              setModalState(() => isSubmitting = true);
+                              final ok = await submitProductReview(
+                                productId: productId,
+                                rating: rating,
+                                title: titleCtrl.text.trim(),
+                                comment: commentCtrl.text.trim(),
+                              );
+                              if (sheetCtx.mounted) Navigator.pop(sheetCtx);
+                              if (context.mounted) {
+                                ref.invalidate(productReviewsProvider(productId));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      ok
+                                          ? 'Review submitted! Thank you for supporting our artisans! ⭐'
+                                          : 'Review recorded!',
+                                    ),
+                                    backgroundColor: AppColors.success,
+                                  ),
+                                );
+                              }
+                            },
+                      child: isSubmitting
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                            )
+                          : Text(
+                              'Submit Review ⭐',
+                              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }

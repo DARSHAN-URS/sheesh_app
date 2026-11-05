@@ -173,7 +173,23 @@ class WishlistNotifier extends StateNotifier<Set<String>> {
       final ids = data.map((e) => (e as Map<String, dynamic>)['product_id'] as String).toSet();
       state = ids;
     } catch (_) {
-      // Ignore — user might not be logged in yet
+      try {
+        final userId = SupabaseService.currentUser?.id;
+        if (userId != null) {
+          final res = await SupabaseService.client
+              .from('wishlists')
+              .select('product_id')
+              .eq('user_id', userId);
+          if (res is List) {
+            final ids = res
+                .map((e) => (e as Map<String, dynamic>)['product_id'] as String?)
+                .where((id) => id != null)
+                .cast<String>()
+                .toSet();
+            state = ids;
+          }
+        }
+      } catch (_) {}
     }
   }
 
@@ -193,7 +209,27 @@ class WishlistNotifier extends StateNotifier<Set<String>> {
         await apiService.post('/wishlist/$productId');
       }
     } catch (_) {
-      // Revert on error
+      // Direct Supabase fallback
+      try {
+        final userId = SupabaseService.currentUser?.id;
+        if (userId != null) {
+          if (isWishlisted) {
+            await SupabaseService.client
+                .from('wishlists')
+                .delete()
+                .eq('user_id', userId)
+                .eq('product_id', productId);
+          } else {
+            await SupabaseService.client.from('wishlists').upsert(
+              {'user_id': userId, 'product_id': productId},
+              onConflict: 'user_id,product_id',
+            );
+          }
+          return;
+        }
+      } catch (_) {}
+
+      // Revert on complete failure
       if (isWishlisted) {
         state = Set.from(state)..add(productId);
       } else {

@@ -600,9 +600,7 @@ class SellerProfileScreen extends ConsumerWidget {
                 'Sign Out',
                 style: GoogleFonts.plusJakartaSans(color: AppColors.error, fontWeight: FontWeight.bold),
               ),
-              onPressed: () async {
-                await ref.read(authProvider.notifier).signOut();
-              },
+              onPressed: () => _confirmSignOut(context, ref),
             ),
 
             // Delete Account (Google Play compliance)
@@ -959,6 +957,52 @@ class SellerProfileScreen extends ConsumerWidget {
           subtitle: Text(subtitle, style: GoogleFonts.plusJakartaSans(fontSize: 11.5, color: AppColors.textSecondary)),
           trailing: trailing ?? const Icon(Icons.chevron_right_rounded, color: AppColors.textLight),
         ),
+      ),
+    );
+  }
+
+  void _confirmSignOut(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.logout_rounded, color: AppColors.error, size: 22),
+            const SizedBox(width: 8),
+            Text('Sign Out', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 17)),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to sign out of your artisan store?',
+          style: GoogleFonts.plusJakartaSans(fontSize: 13, color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: GoogleFonts.poppins(color: AppColors.textLight)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              elevation: 0,
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await ref.read(authProvider.notifier).signOut();
+              ref.read(isSellerModeProvider.notifier).state = false;
+              if (context.mounted) {
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  (_) => false,
+                );
+              }
+            },
+            child: Text('Sign Out', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
     );
   }
