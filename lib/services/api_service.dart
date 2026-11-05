@@ -36,13 +36,15 @@ class ApiService {
           if (error.response != null) {
             final data = error.response?.data;
             final detail = data is Map ? data['detail'] : error.message;
+            final msg = detail?.toString() ?? error.message ?? 'Unknown error';
             handler.reject(
               DioException(
                 requestOptions: error.requestOptions,
                 response: error.response,
+                message: msg,
                 error: ApiException(
                   statusCode: error.response?.statusCode ?? 0,
-                  message: detail?.toString() ?? 'Unknown error',
+                  message: msg,
                 ),
                 type: DioExceptionType.badResponse,
               ),
@@ -77,6 +79,11 @@ class ApiService {
     return response.data;
   }
 
+  Future<dynamic> patch(String path, {dynamic data}) async {
+    final response = await dio.patch(path, data: data);
+    return response.data;
+  }
+
   Future<dynamic> delete(String path) async {
     final response = await dio.delete(path);
     return response.data;
@@ -99,7 +106,32 @@ class ApiException implements Exception {
   const ApiException({required this.statusCode, required this.message});
 
   @override
-  String toString() => 'ApiException($statusCode): $message';
+  String toString() => message;
+}
+
+/// Helper to extract clean user-friendly message from any Exception / DioException
+String extractErrorMessage(dynamic error) {
+  if (error == null) return 'An unexpected error occurred.';
+  if (error is DioException) {
+    if (error.error is ApiException) {
+      return (error.error as ApiException).message;
+    }
+    final data = error.response?.data;
+    if (data is Map && data['detail'] != null) {
+      return data['detail'].toString();
+    }
+    if (error.message != null && error.message!.isNotEmpty) {
+      return error.message!;
+    }
+  }
+  if (error is ApiException) {
+    return error.message;
+  }
+  final str = error.toString();
+  if (str.startsWith('Exception: ')) {
+    return str.substring('Exception: '.length);
+  }
+  return str;
 }
 
 /// Global singleton instance

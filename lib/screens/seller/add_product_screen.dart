@@ -7,9 +7,12 @@ import 'dart:io';
 import '../../theme/app_theme.dart';
 import '../../models/product.dart';
 import '../../providers/products_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
+import '../../services/supabase_service.dart';
 import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
+import 'seller_subscription_screen.dart';
 
 class AddProductScreen extends ConsumerStatefulWidget {
   final Product? productToEdit;
@@ -26,7 +29,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   final _priceController = TextEditingController();
   final _originalPriceController = TextEditingController();
   final _materialController = TextEditingController();
-  final _deliveryTimeController = TextEditingController(text: '2-3 days in Moradabad');
+  final _deliveryTimeController = TextEditingController(text: '2-4 business days');
   final _tagsController = TextEditingController();
 
   String? _selectedCategoryId;
@@ -68,10 +71,100 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   }
 
   Future<void> _pickImages() async {
-    final picked = await _imagePicker.pickMultiImage(imageQuality: 80);
-    if (picked.isNotEmpty) {
-      setState(() => _selectedImages = picked.map((x) => File(x.path)).toList());
-    }
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Upload Craft Photos',
+                style: GoogleFonts.playfairDisplay(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Select photos from your system or take a fresh shot',
+                style: GoogleFonts.plusJakartaSans(fontSize: 12, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.photo_library_rounded, color: AppColors.primary),
+                ),
+                title: Text(
+                  'Choose from Gallery / System',
+                  style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                subtitle: Text(
+                  'Select multiple high-resolution photos from your device',
+                  style: GoogleFonts.plusJakartaSans(fontSize: 11.5, color: AppColors.textSecondary),
+                ),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  final picked = await _imagePicker.pickMultiImage(imageQuality: 85);
+                  if (picked.isNotEmpty) {
+                    setState(() {
+                      _selectedImages.addAll(picked.map((x) => File(x.path)));
+                    });
+                  }
+                },
+              ),
+              const SizedBox(height: 6),
+              ListTile(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD64438).withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.camera_alt_rounded, color: Color(0xFFD64438)),
+                ),
+                title: Text(
+                  'Take Photo with Camera',
+                  style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                subtitle: Text(
+                  'Capture your handcrafted product right now',
+                  style: GoogleFonts.plusJakartaSans(fontSize: 11.5, color: AppColors.textSecondary),
+                ),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  final photo = await _imagePicker.pickImage(source: ImageSource.camera, imageQuality: 85);
+                  if (photo != null) {
+                    setState(() {
+                      _selectedImages.add(File(photo.path));
+                    });
+                  }
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _submit() async {
@@ -110,9 +203,39 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       String productId;
       if (isEditing) {
         productId = widget.productToEdit!.id;
-        await apiService.put('/products/$productId', data: payload);
+        try {
+          await apiService.put('/products/$productId', data: payload);
+        } catch (_) {
+          await SupabaseService.client
+              .from('products')
+              .update(payload)
+              .eq('id', productId);
+        }
       } else {
-        final productData = await apiService.post('/products', data: payload);
+        Map<String, dynamic> productData;
+        try {
+          final res = await apiService.post('/products', data: payload);
+          productData = Map<String, dynamic>.from(res as Map);
+        } catch (apiErr) {
+          // Direct Supabase fallback if Railway backend API fails
+          try {
+            final auth = ref.read(authProvider);
+            final sellerId = auth.sellerProfile?.id ?? (await _getOrCreateSellerId(auth));
+            final insertPayload = Map<String, dynamic>.from(payload);
+            insertPayload['seller_id'] = sellerId;
+            final sbRes = await SupabaseService.client
+                .from('products')
+                .insert(insertPayload)
+                .select();
+            if (sbRes is List && sbRes.isNotEmpty) {
+              productData = Map<String, dynamic>.from(sbRes.first as Map);
+            } else {
+              throw apiErr;
+            }
+          } catch (_) {
+            rethrow;
+          }
+        }
         productId = productData['id'] as String;
       }
 
@@ -122,12 +245,32 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
 
         final file = _selectedImages[i];
         final ext = file.path.split('.').last;
-        final formData = FormData.fromMap({
-          'file': await MultipartFile.fromFile(file.path, filename: '${const Uuid().v4()}.$ext'),
-          'sort_order': (i + (widget.productToEdit?.imageUrls.length ?? 0)).toString(),
-        });
+        final fileName = '${const Uuid().v4()}.$ext';
 
-        await apiService.postMultipart('/products/$productId/images', formData);
+        try {
+          final formData = FormData.fromMap({
+            'file': await MultipartFile.fromFile(file.path, filename: fileName),
+            'sort_order': (i + (widget.productToEdit?.imageUrls.length ?? 0)).toString(),
+          });
+          await apiService.postMultipart('/products/$productId/images', formData);
+        } catch (_) {
+          // Direct Supabase Storage fallback
+          try {
+            final bytes = await file.readAsBytes();
+            final storagePath = '$productId/$fileName';
+            await SupabaseService.client.storage
+                .from('product-images')
+                .uploadBinary(storagePath, bytes);
+            final publicUrl = SupabaseService.client.storage
+                .from('product-images')
+                .getPublicUrl(storagePath);
+            await SupabaseService.client.from('product_images').insert({
+              'product_id': productId,
+              'url': publicUrl,
+              'sort_order': i + (widget.productToEdit?.imageUrls.length ?? 0),
+            });
+          } catch (_) {}
+        }
       }
 
       if (!mounted) return;
@@ -139,9 +282,49 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       );
       Navigator.pop(context, true);
     } catch (e) {
-      _showSnack('Failed to ${isEditing ? "update" : "add"} product: $e');
+      if (e.toString().toLowerCase().contains('limit reached') || e.toString().contains('403')) {
+        _showSnack(e.toString());
+        if (mounted) {
+          SellerSubscriptionScreen.show(context);
+        }
+      } else {
+        final cleanMsg = extractErrorMessage(e);
+        _showSnack('Failed to ${isEditing ? "update" : "add"} product: $cleanMsg');
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<String> _getOrCreateSellerId(AuthState auth) async {
+    final uid = auth.supabaseUser?.id;
+    if (uid == null) throw Exception('Please log in first');
+    try {
+      final res = await SupabaseService.client
+          .from('sellers')
+          .select('id')
+          .eq('user_id', uid)
+          .maybeSingle();
+      if (res != null && res['id'] != null) {
+        return res['id'] as String;
+      }
+      final inserted = await SupabaseService.client
+          .from('sellers')
+          .insert({
+            'user_id': uid,
+            'store_name': auth.fullName.isNotEmpty && auth.fullName != 'User'
+                ? "${auth.fullName}'s Store"
+                : 'My Artisan Store',
+            'category_id': _selectedCategoryId ?? 'brass',
+            'subscription_plan': 'free',
+          })
+          .select('id');
+      if (inserted is List && inserted.isNotEmpty) {
+        return (inserted.first as Map<String, dynamic>)['id'] as String;
+      }
+      return 'seller_$uid';
+    } catch (e) {
+      throw Exception('Could not verify seller store: $e');
     }
   }
 
@@ -225,13 +408,33 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                               ),
                             );
                           }
-                          return ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.file(
-                              _selectedImages[i],
-                              width: 100, height: 120,
-                              fit: BoxFit.cover,
-                            ),
+                          return Stack(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.file(
+                                  _selectedImages[i],
+                                  width: 100,
+                                  height: 120,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                              Positioned(
+                                top: 4,
+                                right: 4,
+                                child: GestureDetector(
+                                  onTap: () => setState(() => _selectedImages.removeAt(i)),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: const BoxDecoration(
+                                      color: Colors.black54,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.close, color: Colors.white, size: 14),
+                                  ),
+                                ),
+                              ),
+                            ],
                           );
                         },
                       ),

@@ -1,5 +1,7 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Sheesh brand primary colour used in FCM notification icon tint -->
     <color name="notification_color">#9E1B4C</color>
+    <color name="splash_bg">#FAF3EC</color>
+	<color name="ic_launcher_background">#5A1629</color>
 </resources>

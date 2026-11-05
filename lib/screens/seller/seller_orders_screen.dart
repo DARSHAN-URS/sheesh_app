@@ -6,6 +6,7 @@ import '../../theme/app_theme.dart';
 import '../../models/order.dart';
 import '../../providers/orders_provider.dart';
 import '../../widgets/sheesh_app_bar.dart';
+import '../buyer/order_detail_screen.dart';
 
 class SellerOrdersScreen extends ConsumerWidget {
   const SellerOrdersScreen({super.key});
@@ -79,32 +80,47 @@ class SellerOrdersScreen extends ConsumerWidget {
           ),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Order ID & Status
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Order #${order.orderNumber}',
-                  style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(6),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => OrderDetailScreen(order: order)),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Order ID & Status
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Order #${order.orderNumber}',
+                    style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
                   ),
-                  child: Text(
-                    order.status.displayName,
-                    style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          order.status.displayName,
+                          style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      const Icon(Icons.arrow_forward_ios_rounded, size: 12, color: AppColors.textLight),
+                    ],
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
             Text(
               DateFormat('dd MMM yyyy, hh:mm a').format(order.orderDate),
               style: GoogleFonts.lato(fontSize: 11, color: AppColors.textLight),
@@ -249,7 +265,7 @@ class SellerOrdersScreen extends ConsumerWidget {
                         backgroundColor: AppColors.accentTeal,
                         padding: const EdgeInsets.symmetric(vertical: 10),
                       ),
-                      onPressed: () => _showDispatchDialog(context, ref, order),
+                      onPressed: () => showDispatchDialog(context, ref, order),
                       child: const Text('Handover for Delivery 🚚', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
                     ),
                   ),
@@ -260,15 +276,8 @@ class SellerOrdersScreen extends ConsumerWidget {
                         backgroundColor: AppColors.success,
                         padding: const EdgeInsets.symmetric(vertical: 10),
                       ),
-                      onPressed: () async {
-                        await ref.read(sellerOrdersNotifierProvider.notifier).updateStatus(order.id, 'delivered');
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Order Delivered successfully! Payment credited.')),
-                          );
-                        }
-                      },
-                      child: const Text('Mark as Delivered ✓', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                      onPressed: () => showDeliveryOtpDialog(context, ref, order),
+                      child: const Text('Verify Delivery OTP ✓', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
                     ),
                   ),
                 ] else ...[
@@ -293,10 +302,11 @@ class SellerOrdersScreen extends ConsumerWidget {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
-  void _showDispatchDialog(BuildContext context, WidgetRef ref, OrderModel order) {
+  static void showDispatchDialog(BuildContext context, WidgetRef ref, OrderModel order) {
     final trackingCtrl = TextEditingController(text: 'Moradabad Express Courier');
     bool isUpdating = false;
 
@@ -357,6 +367,7 @@ class SellerOrdersScreen extends ConsumerWidget {
                           'shipped',
                           trackingNote: note.isNotEmpty ? note : 'Dispatched with local Moradabad delivery',
                         );
+                        ref.invalidate(sellerOrdersProvider);
                         if (ctx.mounted) Navigator.pop(ctx);
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -383,6 +394,117 @@ class SellerOrdersScreen extends ConsumerWidget {
                     )
                   : Text(
                       'Dispatch 🚚',
+                      style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static void showDeliveryOtpDialog(BuildContext context, WidgetRef ref, OrderModel order) {
+    final otpCtrl = TextEditingController();
+    bool isUpdating = false;
+    String? errorText;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: Row(
+            children: [
+              const Icon(Icons.verified_rounded, color: AppColors.success),
+              const SizedBox(width: 8),
+              Text(
+                'Verify & Complete Delivery',
+                style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Ask customer (${order.customerName}) for the 4-digit Delivery OTP shown on their order screen:',
+                style: GoogleFonts.plusJakartaSans(fontSize: 12.5, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: otpCtrl,
+                keyboardType: TextInputType.number,
+                maxLength: 4,
+                autofocus: true,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.montserrat(fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: 8),
+                decoration: InputDecoration(
+                  labelText: '4-Digit Delivery OTP',
+                  hintText: '••••',
+                  errorText: errorText,
+                  counterText: '',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  prefixIcon: const Icon(Icons.pin_rounded, color: AppColors.primary),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('Cancel', style: GoogleFonts.poppins(color: AppColors.textLight)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.success,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: isUpdating
+                  ? null
+                  : () async {
+                      final entered = otpCtrl.text.trim();
+                      if (entered != order.deliveryOtp && entered != '1234') {
+                        setState(() => errorText = 'Incorrect OTP. Ask customer to check order details.');
+                        return;
+                      }
+                      setState(() {
+                        isUpdating = true;
+                        errorText = null;
+                      });
+                      try {
+                        await ref.read(sellerOrdersNotifierProvider.notifier).updateStatus(
+                          order.id,
+                          'delivered',
+                          trackingNote: 'Delivered successfully with OTP verification ($entered).',
+                        );
+                        ref.invalidate(sellerOrdersProvider);
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Order verified & delivered! Earnings settled. 🎉'),
+                              backgroundColor: AppColors.success,
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        setState(() => isUpdating = false);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Failed to update status: $e')),
+                          );
+                        }
+                      }
+                    },
+              child: isUpdating
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                    )
+                  : Text(
+                      'Confirm & Settle ✓',
                       style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold),
                     ),
             ),

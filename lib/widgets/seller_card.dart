@@ -98,6 +98,28 @@ class SellerCard extends StatelessWidget {
                 textAlign: TextAlign.center,
               ),
 
+              if (seller.isFeaturedShePreneur || seller.isPlan399) ...[
+                const SizedBox(height: 2),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFC89B3C), Color(0xFFA6761A)],
+                    ),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    '👑 SHE-PRENEUR',
+                    style: GoogleFonts.montserrat(
+                      fontSize: 7.5,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ],
+
               // Owner Name
               Text(
                 'by ${seller.name}',
@@ -221,6 +243,25 @@ class SellerCard extends StatelessWidget {
                             ),
                           ),
                         ),
+                        if (seller.isFeaturedShePreneur || seller.isPlan399) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(colors: [Color(0xFFC89B3C), Color(0xFFA6761A)]),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              '👑 SHE-PRENEUR',
+                              style: GoogleFonts.montserrat(
+                                fontSize: 8,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                        ],
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(

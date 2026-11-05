@@ -6,6 +6,124 @@ import '../providers/cart_provider.dart';
 import '../theme/app_theme.dart';
 import '../screens/buyer/cart_screen.dart';
 import '../screens/buyer/search_screen.dart';
+import '../screens/seller/seller_onboarding_screen.dart';
+import 'sheesh_brand_emblem.dart';
+
+/// The official header badge for Sheesh, displaying the updated app icon
+/// with the deep wine gradient, white arch frame, coral star sparkle, and "Sheश".
+class HeaderLogoBadge extends StatelessWidget {
+  final double size;
+
+  const HeaderLogoBadge({super.key, this.size = 36});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(size * 0.25),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF5A1629).withValues(alpha: 0.28),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(size * 0.25),
+        child: Image.asset(
+          'assets/images/app_icon.png',
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => Image.asset(
+            'assets/images/sheesh_logo.png',
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) => _buildVectorBadge(size),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVectorBadge(double s) {
+    return Container(
+      width: s,
+      height: s,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF6E1B31), Color(0xFF45101E)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // White Arch
+          Positioned(
+            top: s * 0.12,
+            child: SizedBox(
+              width: s * 0.72,
+              height: s * 0.65,
+              child: const CustomPaint(
+                painter: SheeshArchPainter(
+                  strokeColor: Colors.white,
+                  strokeWidth: 1.5,
+                ),
+              ),
+            ),
+          ),
+          // Top Coral Star Sparkle
+          Positioned(
+            top: s * 0.18,
+            child: SizedBox(
+              width: s * 0.18,
+              height: s * 0.24,
+              child: const CustomPaint(
+                painter: StarSparklePainter(
+                  color: Color(0xFFD64438),
+                ),
+              ),
+            ),
+          ),
+          // Wordmark: She in white, श in coral
+          Positioned(
+            bottom: s * 0.18,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(
+                  'She',
+                  style: GoogleFonts.playfairDisplay(
+                    fontSize: s * 0.28,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+                Text(
+                  'श',
+                  style: GoogleFonts.rozhaOne(
+                    fontSize: s * 0.28,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFFD64438),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class SheeshAppBar extends ConsumerWidget implements PreferredSizeWidget {
   final bool showBackButton;
@@ -61,50 +179,52 @@ class SheeshAppBar extends ConsumerWidget implements PreferredSizeWidget {
               onPressed: () => Navigator.of(context).pop(),
             )
           else ...[
-            // Brand Logo & Subtitle
+            // Updated Brand Logo & Wordmark Header
             GestureDetector(
               onTap: () {},
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
+              child: Row(
                 children: [
-                  Row(
+                  const HeaderLogoBadge(size: 38),
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(
-                        'Sheesh',
-                        style: GoogleFonts.poppins(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.primary,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppColors.gold.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: AppColors.gold.withValues(alpha: 0.4)),
-                        ),
-                        child: Text(
-                          'मुरादाबाद',
-                          style: GoogleFonts.poppins(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.goldDark,
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Text(
+                            'She',
+                            style: GoogleFonts.playfairDisplay(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF261017),
+                              letterSpacing: -0.4,
+                            ),
                           ),
+                          Text(
+                            'श',
+                            style: GoogleFonts.rozhaOne(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFFD64438),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 1),
+                      Text(
+                        'WOMEN CREATE, COMMUNITIES GROW.',
+                        style: GoogleFonts.montserrat(
+                          fontSize: 8.2,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.9,
+                          color: const Color(0xFFD64438),
                         ),
                       ),
                     ],
-                  ),
-                  Text(
-                    'She always could. ✨',
-                    style: GoogleFonts.lato(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textSecondary,
-                    ),
                   ),
                 ],
               ),
@@ -112,11 +232,12 @@ class SheeshAppBar extends ConsumerWidget implements PreferredSizeWidget {
           ],
 
           if (title != null) ...[
-            const SizedBox(width: 8),
+            if (showBackButton) const SizedBox(width: 4),
+            if (!showBackButton) const SizedBox(width: 8),
             Expanded(
               child: Text(
                 title!,
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.playfairDisplay(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                   color: AppColors.textPrimary,
@@ -132,20 +253,35 @@ class SheeshAppBar extends ConsumerWidget implements PreferredSizeWidget {
           if (showRoleToggle)
             InkWell(
               onTap: () {
-                final newMode = !isSellerMode;
-                ref.read(isSellerModeProvider.notifier).state = newMode;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      newMode
-                          ? '✨ Switched to Seller Storefront View'
-                          : '🛍️ Switched to Buyer Shopping View',
+                final auth = ref.read(authProvider);
+                if (!isSellerMode) {
+                  // If user is accessing the seller side for the 1st time, prompt onboarding & details
+                  if (!auth.isSeller && auth.sellerProfile == null) {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const SellerOnboardingScreen()),
+                    );
+                    return;
+                  }
+                  ref.read(isSellerModeProvider.notifier).state = true;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('✨ Switched to Seller Storefront View'),
+                      duration: Duration(seconds: 2),
+                      backgroundColor: AppColors.primaryDark,
+                      behavior: SnackBarBehavior.floating,
                     ),
-                    duration: const Duration(seconds: 2),
-                    backgroundColor: AppColors.primaryDark,
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
+                  );
+                } else {
+                  ref.read(isSellerModeProvider.notifier).state = false;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('🛍️ Switched to Buyer Shopping View'),
+                      duration: Duration(seconds: 2),
+                      backgroundColor: AppColors.primaryDark,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
               },
               borderRadius: BorderRadius.circular(20),
               child: Container(

@@ -6,8 +6,10 @@ import '../../providers/auth_provider.dart';
 import '../../providers/cart_provider.dart';
 import '../../providers/orders_provider.dart';
 import '../seller/seller_main_screen.dart';
+import '../seller/seller_onboarding_screen.dart';
 import 'buyer_home_screen.dart';
 import 'category_screen.dart';
+import 'cart_screen.dart';
 import 'orders_screen.dart';
 import 'buyer_profile_screen.dart';
 
@@ -38,7 +40,8 @@ class _BuyerMainScreenState extends ConsumerState<BuyerMainScreen> {
   @override
   Widget build(BuildContext context) {
     final wishlist = ref.watch(wishlistProvider);
-    final orders = ref.watch(ordersProvider).value ?? [];
+    final cartItems = ref.watch(cartProvider).value ?? [];
+    final cartCount = cartItems.fold<int>(0, (sum, item) => sum + item.quantity);
 
     // Listen for tab switch requests from child widgets (e.g. Profile quick links)
     ref.listen<int>(buyerTabIndexProvider, (previous, next) {
@@ -50,6 +53,15 @@ class _BuyerMainScreenState extends ConsumerState<BuyerMainScreen> {
     // If role switched to seller mode from the top bar or profile, route seamlessly
     ref.listen<bool>(isSellerModeProvider, (previous, next) {
       if (previous == false && next && !_navigating) {
+        final auth = ref.read(authProvider);
+        if (!auth.isSeller && auth.sellerProfile == null) {
+          // If accessing seller mode for the first time, route to onboarding & registration
+          ref.read(isSellerModeProvider.notifier).state = false;
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const SellerOnboardingScreen()),
+          );
+          return;
+        }
         _navigating = true;
         Navigator.of(context).pushReplacement(
           PageRouteBuilder(
@@ -65,7 +77,7 @@ class _BuyerMainScreenState extends ConsumerState<BuyerMainScreen> {
     final List<Widget> screens = [
       const BuyerHomeScreen(),
       const CategoryScreen(),
-      const OrdersScreen(),
+      const CartScreen(isTab: true),
       const BuyerProfileScreen(),
     ];
 
@@ -93,10 +105,10 @@ class _BuyerMainScreenState extends ConsumerState<BuyerMainScreen> {
           onTap: (index) => setState(() => _currentIndex = index),
           type: BottomNavigationBarType.fixed,
           backgroundColor: Colors.white,
-          selectedItemColor: AppColors.primary,
+          selectedItemColor: AppColors.coral,
           unselectedItemColor: AppColors.textLight,
-          selectedLabelStyle: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w700),
-          unselectedLabelStyle: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w500),
+          selectedLabelStyle: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w700),
+          unselectedLabelStyle: GoogleFonts.montserrat(fontSize: 11, fontWeight: FontWeight.w500),
           elevation: 0,
           items: [
             const BottomNavigationBarItem(
@@ -105,35 +117,56 @@ class _BuyerMainScreenState extends ConsumerState<BuyerMainScreen> {
               label: 'Home',
             ),
             const BottomNavigationBarItem(
-              icon: Icon(Icons.grid_view_rounded),
-              activeIcon: Icon(Icons.grid_view_sharp),
+              icon: Icon(Icons.storefront_outlined),
+              activeIcon: Icon(Icons.storefront_rounded),
               label: 'Explore',
             ),
             BottomNavigationBarItem(
               icon: Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  const Icon(Icons.local_shipping_outlined),
-                  if (orders.isNotEmpty || wishlist.isNotEmpty)
+                  const Icon(Icons.shopping_bag_outlined),
+                  if (cartCount > 0)
                     Positioned(
                       right: -6,
                       top: -4,
                       child: Container(
-                        padding: const EdgeInsets.all(3),
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                         decoration: const BoxDecoration(
-                          color: AppColors.primary,
+                          color: Color(0xFFD64438),
                           shape: BoxShape.circle,
                         ),
                         child: Text(
-                          '${orders.length + (wishlist.isNotEmpty ? 1 : 0)}',
-                          style: const TextStyle(fontSize: 8, color: Colors.white, fontWeight: FontWeight.bold),
+                          '$cartCount',
+                          style: const TextStyle(fontSize: 8.5, color: Colors.white, fontWeight: FontWeight.bold),
                         ),
                       ),
                     ),
                 ],
               ),
-              activeIcon: const Icon(Icons.local_shipping_rounded),
-              label: 'Orders',
+              activeIcon: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  const Icon(Icons.shopping_bag_rounded),
+                  if (cartCount > 0)
+                    Positioned(
+                      right: -6,
+                      top: -4,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFD64438),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Text(
+                          '$cartCount',
+                          style: const TextStyle(fontSize: 8.5, color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              label: 'Cart',
             ),
             const BottomNavigationBarItem(
               icon: Icon(Icons.person_outline_rounded),

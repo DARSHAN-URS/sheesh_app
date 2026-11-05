@@ -20,10 +20,27 @@ class CartNotifier extends StateNotifier<AsyncValue<List<CartItem>>> {
       if (data is List) {
         final items = data.map((e) => CartItem.fromJson(e as Map<String, dynamic>)).toList();
         state = AsyncValue.data(items);
+        return;
       } else {
         state = const AsyncValue.data([]);
+        return;
       }
     } catch (_) {
+      // Fallback: fetch directly from Supabase client
+      try {
+        final userId = SupabaseService.currentUser?.id;
+        if (userId != null) {
+          final res = await SupabaseService.client
+              .from('cart_items')
+              .select('*, products(*, product_images(url, sort_order), sellers(id, store_name, upi_id, location, is_verified))')
+              .eq('user_id', userId);
+          if (res is List) {
+            final items = (res as List).map((e) => CartItem.fromJson(e as Map<String, dynamic>)).toList();
+            state = AsyncValue.data(items);
+            return;
+          }
+        }
+      } catch (_) {}
       state = const AsyncValue.data([]);
     }
   }
@@ -44,6 +61,35 @@ class CartNotifier extends StateNotifier<AsyncValue<List<CartItem>>> {
       await apiService.post('/cart/add', data: data);
       await fetchCart(); // Refresh cart
     } catch (e) {
+      // Fallback: direct Supabase upsert
+      try {
+        final userId = SupabaseService.currentUser?.id;
+        if (userId != null) {
+          final existing = await SupabaseService.client
+              .from('cart_items')
+              .select('id, quantity')
+              .eq('user_id', userId)
+              .eq('product_id', productId);
+          if (existing is List && existing.isNotEmpty) {
+            final currentItem = existing.first as Map<String, dynamic>;
+            final currentQty = (currentItem['quantity'] as num?)?.toInt() ?? 1;
+            await SupabaseService.client
+                .from('cart_items')
+                .update({'quantity': currentQty + quantity})
+                .eq('id', currentItem['id']);
+          } else {
+            await SupabaseService.client.from('cart_items').insert({
+              'user_id': userId,
+              'product_id': productId,
+              'quantity': quantity,
+              if (selectedSize != null) 'selected_size': selectedSize,
+              if (selectedColor != null) 'selected_color': selectedColor,
+            });
+          }
+          await fetchCart();
+          return;
+        }
+      } catch (_) {}
       rethrow;
     }
   }
@@ -51,36 +97,53 @@ class CartNotifier extends StateNotifier<AsyncValue<List<CartItem>>> {
   Future<void> updateQuantity(String itemId, int quantity) async {
     try {
       await apiService.put('/cart/$itemId', data: {'quantity': quantity});
-      // Optimistic update
-      state.whenData((items) {
+    } catch (_) {
+      try {
         if (quantity <= 0) {
-          state = AsyncValue.data(items.where((i) => i.id != itemId).toList());
+          await SupabaseService.client.from('cart_items').delete().eq('id', itemId);
         } else {
-          state = AsyncValue.data(
-            items.map((i) => i.id == itemId ? (i..quantity = quantity) : i).toList(),
-          );
+          await SupabaseService.client.from('cart_items').update({'quantity': quantity}).eq('id', itemId);
         }
-      });
-    } catch (e) {
-      await fetchCart(); // Revert to server state on error
-      rethrow;
+      } catch (_) {}
     }
+    // Optimistic update
+    state.whenData((items) {
+      if (quantity <= 0) {
+        state = AsyncValue.data(items.where((i) => i.id != itemId).toList());
+      } else {
+        state = AsyncValue.data(
+          items.map((i) => i.id == itemId ? (i..quantity = quantity) : i).toList(),
+        );
+      }
+    });
   }
 
   Future<void> removeItem(String itemId) async {
     try {
       await apiService.delete('/cart/$itemId');
-      state.whenData((items) {
-        state = AsyncValue.data(items.where((i) => i.id != itemId).toList());
-      });
-    } catch (e) {
-      await fetchCart();
-      rethrow;
+    } catch (_) {
+      try {
+        await SupabaseService.client.from('cart_items').delete().eq('id', itemId);
+      } catch (_) {}
     }
+    state.whenData((items) {
+      state = AsyncValue.data(items.where((i) => i.id != itemId).toList());
+    });
   }
 
+  Future<void> removeFromCart(String itemId) => removeItem(itemId);
+
   Future<void> clearCart() async {
-    await apiService.delete('/cart');
+    try {
+      await apiService.delete('/cart');
+    } catch (_) {
+      try {
+        final uid = SupabaseService.currentUser?.id;
+        if (uid != null) {
+          await SupabaseService.client.from('cart_items').delete().eq('user_id', uid);
+        }
+      } catch (_) {}
+    }
     state = const AsyncValue.data([]);
   }
 

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
+import '../../widgets/sheesh_brand_emblem.dart';
+import '../../widgets/botanical_leaves_painter.dart';
 import '../auth/login_screen.dart';
 import '../buyer/buyer_main_screen.dart';
 import '../seller/seller_main_screen.dart';
@@ -21,9 +23,18 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    Future.delayed(const Duration(milliseconds: 2200), _tryNavigate);
-    // Fallback: never stay stuck on splash screen for more than 4 seconds
-    Future.delayed(const Duration(seconds: 4), () {
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        systemNavigationBarColor: Color(0xFFFAF3EC),
+        systemNavigationBarIconBrightness: Brightness.dark,
+      ),
+    );
+
+    Future.delayed(const Duration(milliseconds: 2400), _tryNavigate);
+    // Fallback: never stay stuck on splash screen for more than 4.5 seconds
+    Future.delayed(const Duration(milliseconds: 4500), () {
       if (!_navigated && mounted) {
         _doNavigate(ref.read(authProvider));
       }
@@ -43,7 +54,6 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     Widget dest;
     if (auth.isAuthenticated) {
       if (auth.isSeller) {
-        // Set mode to seller so SellerMainScreen doesn't immediately redirect back
         ref.read(isSellerModeProvider.notifier).state = true;
         dest = const SellerMainScreen();
       } else {
@@ -68,125 +78,97 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
       if (!next.isLoading && !_navigated) _doNavigate(next);
     });
 
+    final size = MediaQuery.of(context).size;
+
     return Scaffold(
-      body: Container(
+      backgroundColor: const Color(0xFFFAF3EC),
+      body: SizedBox(
         width: double.infinity,
         height: double.infinity,
-        decoration: const BoxDecoration(gradient: AppColors.heroGradient),
         child: Stack(
           children: [
-            Positioned(
-              top: -60, right: -60,
+            // ── Background Warm Gradient & Atmosphere ──
+            Positioned.fill(
               child: Container(
-                width: 220, height: 220,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.gold.withValues(alpha: 0.15),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Color(0xFFFAF3EC),
+                      Color(0xFFFFFBF7),
+                      Color(0xFFFAF1E8),
+                    ],
+                    stops: [0.0, 0.45, 1.0],
+                  ),
                 ),
               ),
             ),
+
+            // ── Top-Left Warm Organic Shape ──
             Positioned(
-              bottom: -80, left: -80,
+              top: -30,
+              left: -35,
               child: Container(
-                width: 260, height: 260,
+                width: 170,
+                height: 190,
                 decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.primaryLight.withValues(alpha: 0.15),
+                  color: const Color(0xFFF7D8CA).withValues(alpha: 0.60),
+                  borderRadius: const BorderRadius.only(
+                    topRight: Radius.circular(90),
+                    bottomRight: Radius.circular(130),
+                    bottomLeft: Radius.circular(100),
+                  ),
                 ),
               ),
-            ),
+            ).animate().fadeIn(duration: 900.ms),
+
+            // ── Top-Right Soft Warm Circle ──
+            Positioned(
+              top: size.height * 0.16,
+              right: -30,
+              child: Container(
+                width: 110,
+                height: 110,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFFF9DDD1).withValues(alpha: 0.55),
+                ),
+              ),
+            ).animate().fadeIn(duration: 900.ms),
+
+            // ── Botanical Foliage Leaves at Bottom ──
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: size.height * 0.44,
+              child: CustomPaint(
+                size: Size(size.width, size.height * 0.44),
+                painter: const BotanicalLeavesPainter(),
+              ),
+            )
+                .animate()
+                .fadeIn(duration: 900.ms, curve: Curves.easeOut)
+                .slideY(begin: 0.08, end: 0, duration: 900.ms, curve: Curves.easeOutCubic),
+
+            // ── Center Brand Emblem & Typography ──
             Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 110, height: 110,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.25),
-                          blurRadius: 20, offset: const Offset(0, 8),
-                        ),
-                      ],
+              child: Padding(
+                padding: EdgeInsets.only(bottom: size.height * 0.06),
+                child: const SheeshBrandEmblem(
+                  scale: 1.0,
+                  showTagline: true,
+                  animateStar: true,
+                )
+                    .animate()
+                    .fadeIn(delay: 200.ms, duration: 800.ms)
+                    .scale(
+                      begin: const Offset(0.92, 0.92),
+                      end: const Offset(1.0, 1.0),
+                      duration: 800.ms,
+                      curve: Curves.easeOutBack,
                     ),
-                    child: ClipOval(
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Image.asset(
-                          'assets/images/sheesh_logo.png',
-                          fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) => const Icon(
-                            Icons.spa_rounded, size: 52, color: AppColors.primary,
-                          ),
-                        ),
-                      ),
-                    ),
-                  )
-                      .animate()
-                      .scale(duration: 800.ms, curve: Curves.easeOutBack)
-                      .shimmer(delay: 600.ms, duration: 1200.ms, color: AppColors.goldLight),
-                  const SizedBox(height: 24),
-                  Text(
-                    'Sheesh',
-                    style: GoogleFonts.poppins(
-                      fontSize: 44, fontWeight: FontWeight.w900,
-                      color: Colors.white, letterSpacing: -1,
-                    ),
-                  )
-                      .animate()
-                      .fadeIn(delay: 300.ms, duration: 600.ms)
-                      .slideY(begin: 0.2, end: 0, duration: 600.ms),
-                  const SizedBox(height: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
-                    ),
-                    child: Text(
-                      'She always could. ✨',
-                      style: GoogleFonts.lato(
-                        fontSize: 15, fontWeight: FontWeight.w600,
-                        color: AppColors.goldLight, letterSpacing: 0.5,
-                      ),
-                    ),
-                  )
-                      .animate()
-                      .fadeIn(delay: 600.ms, duration: 600.ms)
-                      .slideY(begin: 0.3, end: 0, duration: 600.ms),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Empowering Women Micro-Entrepreneurs in Moradabad',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.lato(
-                      fontSize: 12, color: Colors.white.withValues(alpha: 0.8),
-                    ),
-                  ).animate().fadeIn(delay: 900.ms, duration: 600.ms),
-                ],
-              ),
-            ),
-            Positioned(
-              bottom: 40, left: 0, right: 0,
-              child: Column(
-                children: [
-                  const SizedBox(
-                    width: 24, height: 24,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(AppColors.goldLight),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Crafted for Bharat • v1.0.0',
-                    style: GoogleFonts.lato(
-                      fontSize: 11, color: Colors.white.withValues(alpha: 0.6),
-                    ),
-                  ),
-                ],
               ),
             ),
           ],

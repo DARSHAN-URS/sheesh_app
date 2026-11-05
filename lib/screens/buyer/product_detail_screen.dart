@@ -13,6 +13,7 @@ import 'seller_storefront_screen.dart';
 import 'cart_screen.dart';
 import 'checkout_screen.dart';
 import '../../utils/whatsapp_helper.dart';
+import '../../utils/share_helper.dart';
 import '../../utils/delivery_estimate.dart';
 
 class ProductDetailScreen extends ConsumerStatefulWidget {
@@ -103,14 +104,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                     ),
                     child: IconButton(
                       icon: const Icon(Icons.share_rounded, color: AppColors.textPrimary, size: 20),
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Product link copied! Share this artisan creation.'),
-                            backgroundColor: AppColors.primaryDark,
-                          ),
-                        );
-                      },
+                      onPressed: () => ShareHelper.shareProduct(context, product),
                     ),
                   ),
                 ],
@@ -120,9 +114,50 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                     children: [
                       Hero(
                         tag: 'product_image_${product.id}',
-                        child: NetworkImageFallback(
-                          imageUrl: product.imageUrls[_selectedImageIndex.clamp(0, product.imageUrls.length - 1)],
-                          fit: BoxFit.cover,
+                        child: GestureDetector(
+                          onTap: () => _openImageLightbox(
+                            context,
+                            product.imageUrls,
+                            _selectedImageIndex.clamp(0, product.imageUrls.length - 1),
+                          ),
+                          child: NetworkImageFallback(
+                            imageUrl: product.imageUrls[_selectedImageIndex.clamp(0, product.imageUrls.length - 1)],
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                      // Zoom prompt badge
+                      Positioned(
+                        top: 60,
+                        left: 16,
+                        child: GestureDetector(
+                          onTap: () => _openImageLightbox(
+                            context,
+                            product.imageUrls,
+                            _selectedImageIndex.clamp(0, product.imageUrls.length - 1),
+                          ),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.55),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.zoom_in_rounded, size: 14, color: Colors.white),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Tap to Zoom 🔍',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                       // Gradient Overlay for visibility
@@ -328,6 +363,53 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                         ),
                       ),
 
+                      const SizedBox(height: 12),
+
+                      // Artisan Authenticity & Quality Guarantee Badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFAF3EC),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFE8D6CB)),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF5A1629),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.verified_rounded, color: Colors.white, size: 14),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '100% Moradabad Artisan Certified',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: const Color(0xFF261017),
+                                    ),
+                                  ),
+                                  Text(
+                                    'Authentic handcrafted piece • Zero middleman commission',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 11,
+                                      color: const Color(0xFF6D5262),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
                       const SizedBox(height: 20),
 
                       // Seller Profile Spotlight Card
@@ -501,6 +583,53 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                                   ),
                                 ),
                               ],
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      // Artisan Authenticity & Quality Guarantee Badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFAF3EC),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFE8D6CB)),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF5A1629),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.verified_rounded, color: Colors.white, size: 14),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '100% Moradabad Artisan Certified',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: const Color(0xFF261017),
+                                    ),
+                                  ),
+                                  Text(
+                                    'Authentic handcrafted piece • Zero middleman commission',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 11,
+                                      color: const Color(0xFF6D5262),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
                         ),
@@ -843,6 +972,72 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _openImageLightbox(BuildContext context, List<String> imageUrls, int initialIndex) {
+    int currentIndex = initialIndex;
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.94),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLightboxState) => Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.close_rounded, color: Colors.white, size: 26),
+              onPressed: () => Navigator.pop(ctx),
+            ),
+            title: Text(
+              '${currentIndex + 1} of ${imageUrls.length}',
+              style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+            ),
+            centerTitle: true,
+          ),
+          body: Stack(
+            children: [
+              Center(
+                child: InteractiveViewer(
+                  minScale: 0.8,
+                  maxScale: 4.5,
+                  child: NetworkImageFallback(
+                    imageUrl: imageUrls[currentIndex],
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ),
+              if (imageUrls.length > 1) ...[
+                if (currentIndex > 0)
+                  Positioned(
+                    left: 10,
+                    top: 0,
+                    bottom: 0,
+                    child: Center(
+                      child: IconButton(
+                        icon: const Icon(Icons.arrow_back_ios_rounded, color: Colors.white, size: 28),
+                        onPressed: () => setLightboxState(() => currentIndex--),
+                      ),
+                    ),
+                  ),
+                if (currentIndex < imageUrls.length - 1)
+                  Positioned(
+                    right: 10,
+                    top: 0,
+                    bottom: 0,
+                    child: Center(
+                      child: IconButton(
+                        icon: const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white, size: 28),
+                        onPressed: () => setLightboxState(() => currentIndex++),
+                      ),
+                    ),
+                  ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }

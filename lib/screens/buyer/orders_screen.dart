@@ -11,11 +11,18 @@ import '../../providers/cart_provider.dart';
 import '../../widgets/sheesh_app_bar.dart';
 import '../../widgets/network_image_fallback.dart';
 import '../../widgets/product_card.dart';
+import 'order_detail_screen.dart';
+import 'order_tracking_screen.dart';
 
 class OrdersScreen extends ConsumerStatefulWidget {
   final int initialTab; // 0 = Orders, 1 = Saved (Wishlist)
+  final bool showBackButton;
 
-  const OrdersScreen({super.key, this.initialTab = 0});
+  const OrdersScreen({
+    super.key,
+    this.initialTab = 0,
+    this.showBackButton = true,
+  });
 
   @override
   ConsumerState<OrdersScreen> createState() => _OrdersScreenState();
@@ -50,9 +57,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: const SheeshAppBar(
-        showBackButton: false,
-        title: 'Orders & Saved',
+      appBar: SheeshAppBar(
+        showBackButton: widget.showBackButton,
+        title: 'My Orders & Tracking',
       ),
       body: Column(
         children: [
@@ -335,56 +342,73 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Order Header
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: AppColors.background,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
-              border: const Border(bottom: BorderSide(color: AppColors.border)),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => OrderDetailScreen(order: order),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Order #${order.orderNumber}',
-                      style: GoogleFonts.poppins(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
+          );
+        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Order Header
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
+                border: const Border(bottom: BorderSide(color: AppColors.border)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Order #${order.orderNumber}',
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
                       ),
-                    ),
-                    Text(
-                      DateFormat('dd MMM yyyy, hh:mm a').format(order.orderDate),
-                      style: GoogleFonts.lato(fontSize: 11, color: AppColors.textSecondary),
-                    ),
-                  ],
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: statusColor.withValues(alpha: 0.4)),
+                      Text(
+                        DateFormat('dd MMM yyyy, hh:mm a').format(order.orderDate),
+                        style: GoogleFonts.lato(fontSize: 11, color: AppColors.textSecondary),
+                      ),
+                    ],
                   ),
-                  child: Text(
-                    order.status.displayName,
-                    style: GoogleFonts.poppins(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: statusColor,
-                    ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: statusColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: statusColor.withValues(alpha: 0.4)),
+                        ),
+                        child: Text(
+                          order.status.displayName,
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: statusColor,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Icon(Icons.arrow_forward_ios_rounded, size: 13, color: AppColors.textLight),
+                    ],
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
 
           // Order Items
           Padding(
@@ -523,6 +547,26 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                             ),
                           ),
                         ),
+                        const SizedBox(width: 8),
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => OrderTrackingScreen(order: order)),
+                            );
+                          },
+                          icon: const Icon(Icons.delivery_dining_rounded, size: 14),
+                          label: Text('Track 🚚', style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF5A1629),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            elevation: 0,
+                          ),
+                        ),
                         if (order.status == OrderStatus.placed || order.status == OrderStatus.confirmed) ...[
                           const SizedBox(width: 8),
                           OutlinedButton(
@@ -568,10 +612,35 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
               ],
             ),
           ),
+
+          // View Tracking & Details Banner
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            color: const Color(0xFFFAF3EC),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.local_shipping_outlined, size: 15, color: Color(0xFF5A1629)),
+                const SizedBox(width: 8),
+                Text(
+                  'View Full Details & Live Tracking',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF5A1629),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                const Icon(Icons.chevron_right_rounded, size: 16, color: Color(0xFF5A1629)),
+              ],
+            ),
+          ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildTrackingTimeline(OrderStatus status) {
     if (status == OrderStatus.cancelled) {

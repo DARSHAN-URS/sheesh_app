@@ -11,6 +11,7 @@ class Product {
   final String sellerStore;
   final String sellerLocation;
   final bool sellerIsVerified;
+  final String sellerUpiId;
   // Images (joined from product_images table)
   final List<String> imageUrls;
   final double rating;
@@ -37,6 +38,7 @@ class Product {
     this.sellerStore = '',
     this.sellerLocation = 'Moradabad, UP',
     this.sellerIsVerified = false,
+    this.sellerUpiId = '',
     required this.imageUrls,
     this.rating = 4.8,
     this.reviewsCount = 0,
@@ -55,6 +57,8 @@ class Product {
     if (originalPrice == null || originalPrice! <= price) return 0;
     return (((originalPrice! - price) / originalPrice!) * 100).round();
   }
+
+  String get imageUrl => imageUrls.isNotEmpty ? imageUrls.first : '';
 
   factory Product.fromJson(Map<String, dynamic> json) {
     // Extract image URLs from product_images join
@@ -80,6 +84,7 @@ class Product {
       sellerStore: seller?['store_name'] as String? ?? '',
       sellerLocation: seller?['location'] as String? ?? 'Moradabad, UP',
       sellerIsVerified: seller?['is_verified'] as bool? ?? false,
+      sellerUpiId: seller?['upi_id'] as String? ?? '',
       imageUrls: images,
       rating: (json['rating'] as num?)?.toDouble() ?? 4.8,
       reviewsCount: json['reviews_count'] as int? ?? 0,

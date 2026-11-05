@@ -22,10 +22,18 @@ class AppConfig {
     defaultValue: 'rzp_test_YOUR_KEY',
   );
 
-  // ── App ───────────────────────────────────────────────────────
+  // ── Map & Geolocation ─────────────────────────────────────────
+  static const String mapTilerApiKey = String.fromEnvironment(
+    'MAPTILER_API_KEY',
+    defaultValue: 'EtkN5rOfskyw2GAJOfBA',
+  );
+
+  // ── App & Sharing ─────────────────────────────────────────────
   static const String appName = 'Sheesh';
   static const String appTagline = 'She always could.';
   static const String defaultCity = 'Moradabad, UP';
+  static const String appPackageName = 'com.sheesh.sheesh_app';
+  static const String appPlayStoreUrl = 'https://play.google.com/store/apps/details?id=com.sheesh.sheesh_app';
 
   // Delivery thresholds
   static const double freeDeliveryThreshold = 999.0;

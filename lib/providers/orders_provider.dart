@@ -2,7 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/order.dart';
 import '../services/api_service.dart';
 import '../services/supabase_service.dart';
-import '../data/mock_data.dart';
 
 // ─── Orders (Buyer) ───────────────────────────────────────────────────────────
 
@@ -14,20 +13,20 @@ class OrdersNotifier extends StateNotifier<AsyncValue<List<OrderModel>>> {
   Future<void> fetch() async {
     final token = SupabaseService.accessToken;
     if (token == null || !SupabaseService.isLoggedIn) {
-      state = AsyncValue.data(MockData.mockBuyerOrders);
+      state = const AsyncValue.data([]);
       return;
     }
     state = const AsyncValue.loading();
     try {
       final data = await apiService.get('/orders');
-      if (data is List && data.isNotEmpty) {
+      if (data is List) {
         final orders = data.map((e) => OrderModel.fromJson(e as Map<String, dynamic>)).toList();
         state = AsyncValue.data(orders);
       } else {
-        state = AsyncValue.data(MockData.mockBuyerOrders);
+        state = const AsyncValue.data([]);
       }
-    } catch (_) {
-      state = AsyncValue.data(MockData.mockBuyerOrders);
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
     }
   }
 
@@ -90,7 +89,7 @@ class OrdersNotifier extends StateNotifier<AsyncValue<List<OrderModel>>> {
       'rating': rating,
       'title': title,
       'comment': comment,
-      'order_id': ?orderId,
+      if (orderId != null) 'order_id': orderId,
     });
   }
 }
@@ -104,14 +103,14 @@ final ordersProvider = StateNotifierProvider<OrdersNotifier, AsyncValue<List<Ord
 final sellerOrdersProvider = FutureProvider<List<OrderModel>>((ref) async {
   try {
     final token = SupabaseService.accessToken;
-    if (token == null || !SupabaseService.isLoggedIn) return MockData.mockSellerOrders;
+    if (token == null || !SupabaseService.isLoggedIn) return [];
     final data = await apiService.get('/orders/seller');
-    if (data is List && data.isNotEmpty) {
+    if (data is List) {
       return data.map((e) => OrderModel.fromJson(e as Map<String, dynamic>)).toList();
     }
-    return MockData.mockSellerOrders;
+    return [];
   } catch (_) {
-    return MockData.mockSellerOrders;
+    return [];
   }
 });
 
@@ -124,20 +123,20 @@ class SellerOrdersNotifier extends StateNotifier<AsyncValue<List<OrderModel>>> {
   Future<void> fetch() async {
     final token = SupabaseService.accessToken;
     if (token == null || !SupabaseService.isLoggedIn) {
-      state = AsyncValue.data(MockData.mockSellerOrders);
+      state = const AsyncValue.data([]);
       return;
     }
     state = const AsyncValue.loading();
     try {
       final data = await apiService.get('/orders/seller');
-      if (data is List && data.isNotEmpty) {
+      if (data is List) {
         final orders = data.map((e) => OrderModel.fromJson(e as Map<String, dynamic>)).toList();
         state = AsyncValue.data(orders);
       } else {
-        state = AsyncValue.data(MockData.mockSellerOrders);
+        state = const AsyncValue.data([]);
       }
-    } catch (_) {
-      state = AsyncValue.data(MockData.mockSellerOrders);
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
     }
   }
 

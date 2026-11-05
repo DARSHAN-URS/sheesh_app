@@ -89,6 +89,7 @@ class OrderItem {
   });
 
   double get totalPrice => unitPrice * quantity;
+  double get price => unitPrice;
 
   factory OrderItem.fromJson(Map<String, dynamic> json) {
     return OrderItem(
@@ -125,6 +126,17 @@ class OrderModel {
   final String customerName;
   final String customerPhone;
   final String? trackingNote;
+
+  DateTime get createdAt => orderDate;
+
+  String get deliveryOtp {
+    final clean = orderNumber.replaceAll(RegExp(r'[^0-9]'), '');
+    if (clean.length >= 4) {
+      return clean.substring(clean.length - 4);
+    }
+    final hash = id.hashCode.abs();
+    return (1000 + (hash % 9000)).toString();
+  }
 
   OrderModel({
     required this.id,

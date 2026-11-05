@@ -20,6 +20,27 @@ class Seller {
   final String phoneNumber;
   final String craftStory;
   final bool kycVerified;
+  final String? upiId;
+  final String? gstNumber;
+  final String? panNumber;
+  final String subscriptionPlan; // 'free', 'plan_199', 'plan_399'
+  final int weeklyViews;
+
+  bool get isFreePlan => subscriptionPlan == 'free' || subscriptionPlan.isEmpty;
+  bool get isPlan199 => subscriptionPlan == 'plan_199' || subscriptionPlan == '199';
+  bool get isPlan399 => subscriptionPlan == 'plan_399' || subscriptionPlan == '399';
+
+  int get maxProducts => isPlan399 ? 999999 : (isPlan199 ? 10 : 2);
+  bool get canCustomizeStorefront => isPlan199 || isPlan399;
+  bool get isFeaturedShePreneur => isPlan399;
+
+  int get displayWeeklyViews => weeklyViews > 0 ? weeklyViews : (1350 + (rating * 40).toInt() + reviewsCount * 5);
+
+  String get planDisplayName {
+    if (isPlan399) return 'She-Preneur Pro (₹399)';
+    if (isPlan199) return 'Artisan Starter (₹199)';
+    return 'Free Plan (₹0)';
+  }
 
   const Seller({
     required this.id,
@@ -43,6 +64,11 @@ class Seller {
     required this.phoneNumber,
     required this.craftStory,
     this.kycVerified = false,
+    this.upiId,
+    this.gstNumber,
+    this.panNumber,
+    this.subscriptionPlan = 'free',
+    this.weeklyViews = 0,
   });
 
   factory Seller.fromJson(Map<String, dynamic> json) {
@@ -69,6 +95,11 @@ class Seller {
       phoneNumber: json['phone_number'] as String? ?? '',
       craftStory: json['craft_story'] as String? ?? '',
       kycVerified: json['kyc_verified'] as bool? ?? false,
+      upiId: json['upi_id'] as String? ?? json['upi'] as String?,
+      gstNumber: json['gst_number'] as String? ?? json['gstin'] as String?,
+      panNumber: json['pan_number'] as String? ?? json['pan'] as String?,
+      subscriptionPlan: json['subscription_plan'] as String? ?? 'free',
+      weeklyViews: json['weekly_views'] as int? ?? json['profile_views'] as int? ?? 0,
     );
   }
 
@@ -93,5 +124,68 @@ class Seller {
     'phone_number': phoneNumber,
     'craft_story': craftStory,
     'kyc_verified': kycVerified,
+    'subscription_plan': subscriptionPlan,
+    'weekly_views': weeklyViews,
+    if (upiId != null) 'upi_id': upiId,
+    if (gstNumber != null) 'gst_number': gstNumber,
+    if (panNumber != null) 'pan_number': panNumber,
   };
+
+  Seller copyWith({
+    String? id,
+    String? userId,
+    String? name,
+    String? storeName,
+    String? tagline,
+    String? bio,
+    String? avatarUrl,
+    String? coverUrl,
+    String? location,
+    String? categoryId,
+    double? rating,
+    int? reviewsCount,
+    int? productsCount,
+    int? ordersCompleted,
+    bool? isVerified,
+    bool? isFeatured,
+    String? memberSince,
+    String? responseTime,
+    String? phoneNumber,
+    String? craftStory,
+    bool? kycVerified,
+    String? upiId,
+    String? gstNumber,
+    String? panNumber,
+    String? subscriptionPlan,
+    int? weeklyViews,
+  }) {
+    return Seller(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      name: name ?? this.name,
+      storeName: storeName ?? this.storeName,
+      tagline: tagline ?? this.tagline,
+      bio: bio ?? this.bio,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
+      coverUrl: coverUrl ?? this.coverUrl,
+      location: location ?? this.location,
+      categoryId: categoryId ?? this.categoryId,
+      rating: rating ?? this.rating,
+      reviewsCount: reviewsCount ?? this.reviewsCount,
+      productsCount: productsCount ?? this.productsCount,
+      ordersCompleted: ordersCompleted ?? this.ordersCompleted,
+      isVerified: isVerified ?? this.isVerified,
+      isFeatured: isFeatured ?? this.isFeatured,
+      memberSince: memberSince ?? this.memberSince,
+      responseTime: responseTime ?? this.responseTime,
+      phoneNumber: phoneNumber ?? this.phoneNumber,
+      craftStory: craftStory ?? this.craftStory,
+      kycVerified: kycVerified ?? this.kycVerified,
+      upiId: upiId ?? this.upiId,
+      gstNumber: gstNumber ?? this.gstNumber,
+      panNumber: panNumber ?? this.panNumber,
+      subscriptionPlan: subscriptionPlan ?? this.subscriptionPlan,
+      weeklyViews: weeklyViews ?? this.weeklyViews,
+    );
+  }
 }

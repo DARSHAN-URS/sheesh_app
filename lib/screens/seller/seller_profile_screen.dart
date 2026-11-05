@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../theme/app_theme.dart';
@@ -6,10 +7,100 @@ import '../../models/seller.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/sheesh_app_bar.dart';
 import '../../widgets/network_image_fallback.dart';
+import '../../widgets/store_photo_picker_sheet.dart';
+import '../../utils/share_helper.dart';
 import '../buyer/seller_storefront_screen.dart';
+import 'create_store_screen.dart';
+import 'seller_onboarding_screen.dart';
+import 'seller_subscription_screen.dart';
+import '../legal/privacy_policy_screen.dart';
+import '../auth/login_screen.dart';
 
 class SellerProfileScreen extends ConsumerWidget {
   const SellerProfileScreen({super.key});
+
+  void _changePhoto(BuildContext context, WidgetRef ref, StorePhotoType type, String currentUrl, Seller seller) {
+    if (!seller.canCustomizeStorefront) {
+      _showCustomizationLockedDialog(context);
+      return;
+    }
+    StorePhotoPickerSheet.show(
+      context: context,
+      type: type,
+      currentUrl: currentUrl,
+      onSelected: (newUrl) async {
+        try {
+          if (type == StorePhotoType.cover) {
+            await ref.read(authProvider.notifier).updateSellerProfile(coverUrl: newUrl);
+          } else {
+            await ref.read(authProvider.notifier).updateSellerProfile(avatarUrl: newUrl);
+          }
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  type == StorePhotoType.cover
+                      ? 'Store cover banner updated! ✓'
+                      : 'Store profile avatar updated! ✓',
+                  style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w600),
+                ),
+                backgroundColor: const Color(0xFF2A7B54),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            );
+          }
+        } catch (e) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Failed to update: $e')),
+            );
+          }
+        }
+      },
+    );
+  }
+
+  void _showCustomizationLockedDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Text('🎨', style: TextStyle(fontSize: 22)),
+            const SizedBox(width: 8),
+            Text(
+              'Customization Locked',
+              style: GoogleFonts.playfairDisplay(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: Text(
+          'Storefront customization (custom cover banners, avatars & brand styling) is an Artisan Starter (₹199) and She-Preneur Pro (₹399) feature.\n\nUpgrade now to give your Digital Dukaan a distinctive brand identity!',
+          style: GoogleFonts.plusJakartaSans(fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Maybe Later', style: GoogleFonts.plusJakartaSans(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF5A1629),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              SellerSubscriptionScreen.show(context);
+            },
+            child: Text('View Plans 🚀', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -18,15 +109,17 @@ class SellerProfileScreen extends ConsumerWidget {
         Seller(
           id: 'seller_current',
           userId: auth.supabaseUser?.id ?? 'user_current',
-          name: auth.fullName,
-          storeName: 'My Sheesh Store',
-          tagline: 'Handcrafted with Love in Moradabad',
-          bio: 'Moradabad local artisan',
-          craftStory: 'Traditional Moradabad crafts passed down generations.',
-          location: auth.city,
+          name: auth.fullName.isNotEmpty && auth.fullName != 'User' ? auth.fullName : 'Artisan',
+          storeName: auth.fullName.isNotEmpty && auth.fullName != 'User'
+              ? "${auth.fullName}'s Store"
+              : 'My Artisan Store',
+          tagline: 'Handcrafted Creations',
+          bio: '',
+          craftStory: '',
+          location: auth.city.isNotEmpty && auth.city != 'Moradabad, UP' ? auth.city : '',
           categoryId: 'brass',
-          avatarUrl: auth.avatarUrl ?? 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400',
-          coverUrl: 'https://images.unsplash.com/photo-1606760227091-3dd870d97f1d?w=800',
+          avatarUrl: auth.avatarUrl ?? 'assets/images/sheesh_logo.png',
+          coverUrl: 'assets/images/backgrounds/craft-studio.jpg',
           rating: 5.0,
           reviewsCount: 0,
           productsCount: 0,
@@ -35,7 +128,7 @@ class SellerProfileScreen extends ConsumerWidget {
           isFeatured: false,
           memberSince: '2025',
           responseTime: 'Within 2 hours',
-          phoneNumber: '+919876543210',
+          phoneNumber: auth.supabaseUser?.phone ?? '',
         );
 
     return Scaffold(
@@ -49,64 +142,183 @@ class SellerProfileScreen extends ConsumerWidget {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // Store Avatar & Info
+            // ── Store Cover Banner & Interactive Avatar Card ──
             Container(
-              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(22),
                 border: Border.all(color: AppColors.border),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.02),
-                    blurRadius: 10,
+                    color: const Color(0xFF5A1629).withValues(alpha: 0.06),
+                    blurRadius: 14,
+                    offset: const Offset(0, 4),
                   ),
                 ],
               ),
+              clipBehavior: Clip.antiAlias,
               child: Column(
                 children: [
+                  // Cover Image with Edit Button
                   Stack(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(3),
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: AppColors.goldGradient,
+                      SizedBox(
+                        height: 125,
+                        width: double.infinity,
+                        child: NetworkImageFallback(
+                          imageUrl: seller.coverUrl.isNotEmpty
+                              ? seller.coverUrl
+                              : 'assets/images/backgrounds/craft-studio.jpg',
+                          fit: BoxFit.cover,
                         ),
-                        child: ClipOval(
-                          child: SizedBox(
-                            width: 80,
-                            height: 80,
-                            child: NetworkImageFallback(imageUrl: seller.avatarUrl),
+                      ),
+                      Container(
+                        height: 125,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.black.withValues(alpha: 0.25),
+                              Colors.transparent,
+                              Colors.black.withValues(alpha: 0.40),
+                            ],
+                          ),
+                        ),
+                      ),
+                      // "Edit Cover" Floating Chip
+                      Positioned(
+                        top: 10,
+                        right: 10,
+                        child: InkWell(
+                          onTap: () => _changePhoto(context, ref, StorePhotoType.cover, seller.coverUrl, seller),
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.65),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.4)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.camera_alt_outlined, color: Colors.white, size: 13),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Edit Cover',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    seller.storeName,
-                    style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  Text(
-                    'Managed by ${seller.name}',
-                    style: GoogleFonts.lato(fontSize: 13, color: AppColors.textSecondary),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppColors.success.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
+
+                  // Avatar & Store Details
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+                    child: Column(
                       children: [
-                        const Icon(Icons.verified_user_rounded, color: AppColors.success, size: 14),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Verified Moradabad Enterprise ✓',
-                          style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.success),
+                        Transform.translate(
+                          offset: const Offset(0, -32),
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              GestureDetector(
+                                onTap: () => _changePhoto(context, ref, StorePhotoType.avatar, seller.avatarUrl, seller),
+                                child: Container(
+                                  width: 76,
+                                  height: 76,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Colors.white,
+                                    border: Border.all(color: Colors.white, width: 3),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(alpha: 0.15),
+                                        blurRadius: 10,
+                                        offset: const Offset(0, 3),
+                                      ),
+                                    ],
+                                  ),
+                                  child: ClipOval(
+                                    child: NetworkImageFallback(
+                                      imageUrl: seller.avatarUrl,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Positioned(
+                                bottom: 0,
+                                right: 0,
+                                child: GestureDetector(
+                                  onTap: () => _changePhoto(context, ref, StorePhotoType.avatar, seller.avatarUrl, seller),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(5),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFD64438),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: Colors.white, width: 1.5),
+                                    ),
+                                    child: const Icon(Icons.edit_rounded, color: Colors.white, size: 12),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Transform.translate(
+                          offset: const Offset(0, -20),
+                          child: Column(
+                            children: [
+                              Text(
+                                seller.storeName,
+                                style: GoogleFonts.playfairDisplay(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Managed by ${seller.name} • ${seller.location}',
+                                style: GoogleFonts.plusJakartaSans(fontSize: 12, color: AppColors.textSecondary),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF2A7B54).withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.verified_user_rounded, color: Color(0xFF2A7B54), size: 14),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Verified Moradabad Enterprise ✓',
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: const Color(0xFF2A7B54),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
@@ -117,13 +329,126 @@ class SellerProfileScreen extends ConsumerWidget {
 
             const SizedBox(height: 20),
 
-            // Storefront Actions
+            // ── Subscription Plan Tile ──
             _buildActionTile(
               context,
-              title: 'Edit Store Details',
-              subtitle: 'Update store name, tagline, location & craft story',
+              title: 'Subscription: ${seller.planDisplayName}',
+              subtitle: seller.isPlan399
+                  ? 'Unlimited listings • Featured in She-Preneurs 👑'
+                  : (seller.isPlan199
+                      ? '10 listings • Storefront customized 🌟'
+                      : '2 listings • Free plan (Tap to upgrade) 🚀'),
+              icon: Icons.workspace_premium_rounded,
+              trailing: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  gradient: seller.isPlan399
+                      ? const LinearGradient(colors: [Color(0xFFD4AF37), Color(0xFFB8860B)])
+                      : (seller.isPlan199
+                          ? const LinearGradient(colors: [Color(0xFF5A1629), Color(0xFFD64438)])
+                          : null),
+                  color: seller.isFreePlan ? Colors.grey.shade200 : null,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  seller.isPlan399
+                      ? '👑 PRO'
+                      : (seller.isPlan199 ? 'STARTER' : 'UPGRADE 🚀'),
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: seller.isFreePlan ? Colors.black87 : Colors.white,
+                  ),
+                ),
+              ),
+              onTap: () => SellerSubscriptionScreen.show(context),
+            ),
+
+            // ── Storefront Visual Branding Options ──
+            _buildActionTile(
+              context,
+              title: 'Change Store Cover Photo',
+              subtitle: 'Select from Sheesh artisan workshops or upload your own',
+              icon: Icons.panorama_outlined,
+              trailing: !seller.canCustomizeStorefront
+                  ? Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD64438).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.lock_rounded, size: 12, color: Color(0xFFD64438)),
+                          const SizedBox(width: 4),
+                          Text(
+                            '₹199+',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFFD64438),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : null,
+              onTap: () => _changePhoto(context, ref, StorePhotoType.cover, seller.coverUrl, seller),
+            ),
+
+            _buildActionTile(
+              context,
+              title: 'Change Store Profile Photo',
+              subtitle: 'Pick Sheesh brand crests or upload your custom logo',
+              icon: Icons.account_box_outlined,
+              trailing: !seller.canCustomizeStorefront
+                  ? Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD64438).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.lock_rounded, size: 12, color: Color(0xFFD64438)),
+                          const SizedBox(width: 4),
+                          Text(
+                            '₹199+',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFFD64438),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : null,
+              onTap: () => _changePhoto(context, ref, StorePhotoType.avatar, seller.avatarUrl, seller),
+            ),
+
+            _buildActionTile(
+              context,
+              title: auth.sellerProfile != null ? 'Edit Store Details' : 'Register Store Details',
+              subtitle: 'Update store name, brand color, category & craft story',
               icon: Icons.edit_note_rounded,
-              onTap: () => _showEditStoreDialog(context, ref, seller),
+              onTap: () {
+                if (auth.sellerProfile != null) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => CreateStoreScreen(existingSeller: seller),
+                    ),
+                  );
+                } else {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const SellerOnboardingScreen(),
+                    ),
+                  );
+                }
+              },
             ),
 
             _buildActionTile(
@@ -140,12 +465,77 @@ class SellerProfileScreen extends ConsumerWidget {
 
             _buildActionTile(
               context,
-              title: 'Payout Bank Account & UPI',
-              subtitle: 'State Bank of India (***4819) • Primary',
-              icon: Icons.account_balance_outlined,
+              title: 'Share Store & App Link',
+              subtitle: 'Copy link & share your artisan storefront with customers',
+              icon: Icons.share_rounded,
+              trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: AppColors.goldDark),
+              onTap: () => ShareHelper.shareStore(context, seller),
+            ),
+
+            _buildActionTile(
+              context,
+              title: 'Direct UPI ID & QR Payments',
+              subtitle: (seller.upiId != null && seller.upiId!.isNotEmpty)
+                  ? 'Active VPA: ${seller.upiId}'
+                  : 'Tap to configure your UPI ID for direct 0% fee payments',
+              icon: Icons.qr_code_2_rounded,
+              trailing: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: (seller.upiId != null && seller.upiId!.isNotEmpty)
+                      ? const Color(0xFF2A7B54).withValues(alpha: 0.12)
+                      : const Color(0xFFD64438).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  (seller.upiId != null && seller.upiId!.isNotEmpty) ? 'READY' : 'SETUP',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: (seller.upiId != null && seller.upiId!.isNotEmpty)
+                        ? const Color(0xFF2A7B54)
+                        : const Color(0xFFD64438),
+                  ),
+                ),
+              ),
+              onTap: () => _showUpiSettingsDialog(context, ref, seller),
+            ),
+
+            _buildActionTile(
+              context,
+              title: 'GST & Business Registration',
+              subtitle: (seller.gstNumber != null && seller.gstNumber!.isNotEmpty)
+                  ? 'GSTIN: ${seller.gstNumber}'
+                  : ((seller.panNumber != null && seller.panNumber!.isNotEmpty)
+                      ? 'PAN: ${seller.panNumber} • Exempt under ₹20L'
+                      : 'Optional • Exempt under Sec 23 CGST Act (Turnover < ₹20L)'),
+              icon: Icons.receipt_long_outlined,
+              trailing: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: (seller.gstNumber != null && seller.gstNumber!.isNotEmpty)
+                      ? const Color(0xFF2A7B54).withValues(alpha: 0.12)
+                      : const Color(0xFFC89B3C).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  (seller.gstNumber != null && seller.gstNumber!.isNotEmpty)
+                      ? 'GST ADDED'
+                      : 'OPTIONAL',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: (seller.gstNumber != null && seller.gstNumber!.isNotEmpty)
+                        ? const Color(0xFF2A7B54)
+                        : const Color(0xFF966E1E),
+                  ),
+                ),
+              ),
               onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Bank account verified for instant daily payouts.')),
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => CreateStoreScreen(existingSeller: seller),
+                  ),
                 );
               },
             ),
@@ -156,6 +546,18 @@ class SellerProfileScreen extends ConsumerWidget {
               subtitle: seller.location,
               icon: Icons.location_on_outlined,
               onTap: () {},
+            ),
+
+            _buildActionTile(
+              context,
+              title: 'Privacy Policy & Terms 🛡️',
+              subtitle: 'Data safety, artisan rights & Google Play compliance',
+              icon: Icons.shield_outlined,
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen()),
+                );
+              },
             ),
 
             _buildActionTile(
@@ -182,7 +584,7 @@ class SellerProfileScreen extends ConsumerWidget {
               icon: const Icon(Icons.shopping_bag_outlined, color: AppColors.primary),
               label: Text(
                 'Switch to Buyer Shopping Mode 🛍️',
-                style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: AppColors.primary),
+                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, color: AppColors.primary),
               ),
               onPressed: () {
                 ref.read(isSellerModeProvider.notifier).state = false;
@@ -196,11 +598,21 @@ class SellerProfileScreen extends ConsumerWidget {
               icon: const Icon(Icons.logout_rounded, color: AppColors.error, size: 18),
               label: Text(
                 'Sign Out',
-                style: GoogleFonts.poppins(color: AppColors.error, fontWeight: FontWeight.bold),
+                style: GoogleFonts.plusJakartaSans(color: AppColors.error, fontWeight: FontWeight.bold),
               ),
               onPressed: () async {
                 await ref.read(authProvider.notifier).signOut();
               },
+            ),
+
+            // Delete Account (Google Play compliance)
+            TextButton.icon(
+              icon: const Icon(Icons.delete_forever_rounded, color: Colors.grey, size: 18),
+              label: Text(
+                'Delete Account 🗑️',
+                style: GoogleFonts.plusJakartaSans(color: Colors.grey.shade700, fontSize: 12),
+              ),
+              onPressed: () => _confirmDeleteAccount(context, ref),
             ),
 
             const SizedBox(height: 24),
@@ -210,12 +622,318 @@ class SellerProfileScreen extends ConsumerWidget {
     );
   }
 
+  void _showUpiSettingsDialog(BuildContext context, WidgetRef ref, Seller seller) {
+    final upiCtrl = TextEditingController(text: seller.upiId ?? '');
+    bool isSaving = false;
+    String? errorText;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (sheetContext, setModalState) {
+            final currentUpi = upiCtrl.text.trim();
+            final hasValidUpi = currentUpi.isNotEmpty && currentUpi.contains('@');
+
+            return Container(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24,
+              ),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Sheet Header Handle
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: AppColors.border,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2A7B54).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.qr_code_2_rounded, color: Color(0xFF2A7B54), size: 24),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Store UPI & Payment QR',
+                                style: GoogleFonts.playfairDisplay(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              Text(
+                                'Receive direct payments with 0% commission',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded, color: AppColors.textLight),
+                          onPressed: () => Navigator.pop(sheetContext),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 18),
+
+                    Text(
+                      'UPI ID / Virtual Payment Address (VPA)',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: upiCtrl,
+                      keyboardType: TextInputType.emailAddress,
+                      onChanged: (_) {
+                        setModalState(() {
+                          errorText = null;
+                        });
+                      },
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'e.g. artisan@oksbi or 9548269940@paytm',
+                        hintStyle: GoogleFonts.plusJakartaSans(fontSize: 13, color: AppColors.textLight),
+                        errorText: errorText,
+                        prefixIcon: const Icon(Icons.currency_rupee_rounded, color: Color(0xFF2A7B54), size: 20),
+                        suffixIcon: currentUpi.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.copy_rounded, size: 18, color: AppColors.primary),
+                                tooltip: 'Copy UPI ID',
+                                onPressed: () {
+                                  Clipboard.setData(ClipboardData(text: currentUpi));
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('UPI ID copied to clipboard!'),
+                                      duration: Duration(seconds: 2),
+                                    ),
+                                  );
+                                },
+                              )
+                            : null,
+                        filled: true,
+                        fillColor: const Color(0xFFFAF3EC),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: const BorderSide(color: AppColors.border),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: const BorderSide(color: AppColors.border),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: const BorderSide(color: AppColors.primary, width: 2),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // Supported Apps Banner
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFAF3EC),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFEEDCD4)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.verified_rounded, color: Color(0xFF2A7B54), size: 16),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Supports Google Pay, PhonePe, Paytm, BHIM & all Indian UPI apps.',
+                              style: GoogleFonts.plusJakartaSans(fontSize: 11.5, color: const Color(0xFF6D5262)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Live Store QR Code Preview
+                    if (hasValidUpi) ...[
+                      Center(
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: AppColors.border),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.05),
+                                blurRadius: 10,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: NetworkImageFallback(
+                                  imageUrl:
+                                      'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${Uri.encodeComponent('upi://pay?pa=$currentUpi&pn=${Uri.encodeComponent(seller.storeName)}&cu=INR')}',
+                                  width: 170,
+                                  height: 170,
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                seller.storeName,
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              Text(
+                                currentUpi,
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 11,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Scan with any UPI app to pay directly',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 10,
+                                  color: const Color(0xFF2A7B54),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                    ],
+
+                    // Save Button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF5A1629),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          elevation: 0,
+                        ),
+                        onPressed: isSaving
+                            ? null
+                            : () async {
+                                final text = upiCtrl.text.trim();
+                                if (text.isNotEmpty && !text.contains('@')) {
+                                  setModalState(() {
+                                    errorText = 'Please enter a valid UPI VPA (must contain "@", e.g. name@okhdfcbank)';
+                                  });
+                                  return;
+                                }
+
+                                setModalState(() => isSaving = true);
+                                try {
+                                  await ref.read(authProvider.notifier).updateSellerProfile(
+                                        upiId: text.isNotEmpty ? text : '',
+                                      );
+                                  if (sheetContext.mounted) {
+                                    Navigator.pop(sheetContext);
+                                  }
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          text.isNotEmpty
+                                              ? 'UPI ID updated! Buyers can now pay you directly ✓'
+                                              : 'UPI ID removed.',
+                                          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
+                                        ),
+                                        backgroundColor: const Color(0xFF2A7B54),
+                                        behavior: SnackBarBehavior.floating,
+                                      ),
+                                    );
+                                  }
+                                } catch (e) {
+                                  setModalState(() {
+                                    isSaving = false;
+                                    errorText = 'Failed to save: $e';
+                                  });
+                                }
+                              },
+                        child: isSaving
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.2),
+                              )
+                            : Text(
+                                'Save UPI ID',
+                                style: GoogleFonts.plusJakartaSans(fontSize: 15, fontWeight: FontWeight.bold),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildActionTile(
     BuildContext context, {
     required String title,
     required String subtitle,
     required IconData icon,
     required VoidCallback onTap,
+    Widget? trailing,
   }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -237,169 +955,69 @@ class SellerProfileScreen extends ConsumerWidget {
             ),
             child: Icon(icon, color: AppColors.primary, size: 20),
           ),
-          title: Text(title, style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold)),
-          subtitle: Text(subtitle, style: GoogleFonts.lato(fontSize: 11, color: AppColors.textSecondary)),
-          trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textLight),
+          title: Text(title, style: GoogleFonts.plusJakartaSans(fontSize: 13.5, fontWeight: FontWeight.bold)),
+          subtitle: Text(subtitle, style: GoogleFonts.plusJakartaSans(fontSize: 11.5, color: AppColors.textSecondary)),
+          trailing: trailing ?? const Icon(Icons.chevron_right_rounded, color: AppColors.textLight),
         ),
       ),
     );
   }
 
-  void _showEditStoreDialog(BuildContext context, WidgetRef ref, Seller seller) {
-    final storeNameCtrl = TextEditingController(text: seller.storeName);
-    final avatarUrlCtrl = TextEditingController(text: seller.avatarUrl);
-    final taglineCtrl = TextEditingController(text: seller.tagline);
-    final locationCtrl = TextEditingController(text: seller.location);
-    final craftStoryCtrl = TextEditingController(text: seller.craftStory.isNotEmpty ? seller.craftStory : seller.bio);
-    bool isSaving = false;
-
-    showModalBottomSheet(
+  void _confirmDeleteAccount(BuildContext context, WidgetRef ref) {
+    showDialog(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setModalState) => Container(
-          padding: EdgeInsets.only(
-            top: 24,
-            left: 20,
-            right: 20,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-          ),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppColors.border,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Edit Store Profile 🏪',
-                  style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  'Customize your artisan store branding (independent of your buyer profile)',
-                  style: GoogleFonts.lato(fontSize: 12, color: AppColors.textSecondary),
-                ),
-                const SizedBox(height: 20),
-                TextField(
-                  controller: storeNameCtrl,
-                  decoration: InputDecoration(
-                    labelText: 'Store / Brand Name',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    prefixIcon: const Icon(Icons.storefront_outlined),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: avatarUrlCtrl,
-                  decoration: InputDecoration(
-                    labelText: 'Store Logo / Avatar Image URL',
-                    hintText: 'https://example.com/store-logo.jpg',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    prefixIcon: const Icon(Icons.image_outlined),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: taglineCtrl,
-                  decoration: InputDecoration(
-                    labelText: 'Tagline / Motto',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    prefixIcon: const Icon(Icons.flag_outlined),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: locationCtrl,
-                  decoration: InputDecoration(
-                    labelText: 'Workshop / Operating Location',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    prefixIcon: const Icon(Icons.location_on_outlined),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: craftStoryCtrl,
-                  maxLines: 3,
-                  decoration: InputDecoration(
-                    labelText: 'Artisan Story / Craft Heritage',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    prefixIcon: const Icon(Icons.history_edu_outlined),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    onPressed: isSaving
-                        ? null
-                        : () async {
-                            final sName = storeNameCtrl.text.trim();
-                            if (sName.isEmpty) return;
-                            setModalState(() => isSaving = true);
-                            try {
-                              await ref.read(authProvider.notifier).updateSellerProfile(
-                                storeName: sName,
-                                avatarUrl: avatarUrlCtrl.text.trim(),
-                                tagline: taglineCtrl.text.trim(),
-                                location: locationCtrl.text.trim(),
-                                craftStory: craftStoryCtrl.text.trim(),
-                              );
-                              if (ctx.mounted) Navigator.pop(ctx);
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Store profile updated successfully! ✓'),
-                                    backgroundColor: AppColors.success,
-                                  ),
-                                );
-                              }
-                            } catch (e) {
-                              setModalState(() => isSaving = false);
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Failed to update: $e'),
-                                    backgroundColor: AppColors.error,
-                                  ),
-                                );
-                              }
-                            }
-                          },
-                    child: isSaving
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                          )
-                        : Text(
-                            'Save Changes',
-                            style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white),
-                          ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 24),
+            const SizedBox(width: 8),
+            Text('Delete Account?', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 17, color: AppColors.error)),
+          ],
         ),
+        content: Text(
+          'This action is permanent.\n\nAll your artisan profile information, products, and account settings will be erased immediately in compliance with data privacy policies.\n\nAre you sure you wish to delete your account?',
+          style: GoogleFonts.plusJakartaSans(fontSize: 12.5, height: 1.45, color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: GoogleFonts.poppins(color: AppColors.textLight)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              elevation: 0,
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                await ref.read(authProvider.notifier).deleteAccount();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Your account and personal data have been permanently deleted.'),
+                      backgroundColor: Colors.black87,
+                    ),
+                  );
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                    (_) => false,
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to delete account: $e')),
+                  );
+                }
+              }
+            },
+            child: Text('Delete Permanently', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
     );
   }

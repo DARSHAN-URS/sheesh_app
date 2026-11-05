@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'dart:math';
 import '../../theme/app_theme.dart';
 import '../../core/config.dart';
@@ -13,6 +15,9 @@ import '../../providers/orders_provider.dart';
 import '../../providers/addresses_provider.dart';
 import '../../services/api_service.dart';
 import '../../utils/delivery_estimate.dart';
+import '../../widgets/addresses_manager_sheet.dart';
+import 'order_detail_screen.dart';
+import 'order_tracking_screen.dart';
 
 class CheckoutScreen extends ConsumerStatefulWidget {
   const CheckoutScreen({super.key});
@@ -141,8 +146,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         'cart_subtotal': cartSubtotal,
       }) as Map<String, dynamic>;
       setState(() {
-        _appliedCouponCode = res['code'] as String;
-        _appliedDiscountAmount = (res['discount_amount'] as num).toDouble();
+        _appliedCouponCode = res['code'] as String?;
+        _appliedDiscountAmount = (res['discount_amount'] as num?)?.toDouble() ??
+            (res['discount'] as num?)?.toDouble() ??
+            0.0;
         _appliedCouponDescription = res['description'] as String?;
         _isValidatingCoupon = false;
       });
@@ -196,7 +203,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
       _pendingOrderId = (result['order'] as Map<String, dynamic>)['id'] as String;
 
-      if (_paymentMethod == 'cod') {
+      if (_paymentMethod == 'cod' || _paymentMethod == 'seller_upi') {
         if (mounted) _showOrderSuccess(_pendingOrderId!);
         return;
       }
@@ -241,116 +248,19 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     );
   }
 
-  void _showAddAddressSheet() {
-    final nameCtrl = TextEditingController(text: _nameController.text);
-    final phoneCtrl = TextEditingController(text: _phoneController.text);
-    final streetCtrl = TextEditingController();
-    final cityCtrl = TextEditingController(text: 'Moradabad');
-    final pinCtrl = TextEditingController(text: '244001');
-    String label = 'Home';
-    bool isSaving = false;
-
-    showModalBottomSheet(
+  void _showAddAddressSheet() async {
+    final addresses = ref.read(addressesProvider).valueOrNull ?? [];
+    final currentSelected = addresses.where((a) => a.id == _selectedAddressId).firstOrNull;
+    final selected = await AddressesManagerSheet.show(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheetState) => Container(
-          padding: EdgeInsets.only(
-            top: 20,
-            left: 20,
-            right: 20,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-          ),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2)),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text('Add New Delivery Address', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 16),
-
-                // Label selector
-                Row(
-                  children: ['Home', 'Work', 'Other'].map((l) {
-                    final isSel = label == l;
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: ChoiceChip(
-                        label: Text(l, style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600)),
-                        selected: isSel,
-                        selectedColor: AppColors.primary.withValues(alpha: 0.15),
-                        onSelected: (val) => setSheetState(() => label = l),
-                      ),
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 12),
-
-                TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Recipient Name')),
-                const SizedBox(height: 10),
-                TextField(controller: phoneCtrl, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Contact Phone')),
-                const SizedBox(height: 10),
-                TextField(controller: streetCtrl, maxLines: 2, decoration: const InputDecoration(labelText: 'Flat / House No. / Street / Colony')),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(child: TextField(controller: cityCtrl, decoration: const InputDecoration(labelText: 'City'))),
-                    const SizedBox(width: 12),
-                    Expanded(child: TextField(controller: pinCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'PIN Code'))),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    onPressed: isSaving
-                        ? null
-                        : () async {
-                            if (streetCtrl.text.trim().isEmpty) return;
-                            setSheetState(() => isSaving = true);
-                            final created = await ref.read(addressesProvider.notifier).addAddress(
-                              label: label,
-                              name: nameCtrl.text.trim(),
-                              phone: phoneCtrl.text.trim(),
-                              street: streetCtrl.text.trim(),
-                              city: cityCtrl.text.trim(),
-                              postalCode: pinCtrl.text.trim(),
-                              isDefault: true,
-                            );
-                            if (ctx.mounted) Navigator.pop(ctx);
-                            if (created != null) {
-                              _selectAddress(created);
-                            }
-                          },
-                    child: isSaving
-                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                        : Text('Save & Deliver Here', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+      selectedAddress: currentSelected,
+      onAddressSelected: (addr) {
+        _selectAddress(addr);
+      },
     );
+    if (selected != null) {
+      _selectAddress(selected);
+    }
   }
 
   @override
@@ -417,10 +327,17 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     _sectionTitle('📍 Delivery Address'),
-                    TextButton.icon(
-                      onPressed: _showAddAddressSheet,
-                      icon: const Icon(Icons.add_location_alt_outlined, size: 16, color: AppColors.primary),
-                      label: Text('+ Add New', style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                    addressesAsync.when(
+                      data: (list) => TextButton.icon(
+                        onPressed: _showAddAddressSheet,
+                        icon: const Icon(Icons.tune_rounded, size: 15, color: AppColors.primary),
+                        label: Text(
+                          list.isNotEmpty ? 'Manage (${list.length}/5)' : '+ Add New',
+                          style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary),
+                        ),
+                      ),
+                      loading: () => const SizedBox.shrink(),
+                      error: (_, __) => const SizedBox.shrink(),
                     ),
                   ],
                 ),
@@ -430,28 +347,103 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                   loading: () => const SizedBox.shrink(),
                   error: (err, stack) => const SizedBox.shrink(),
                   data: (addresses) {
-                    if (addresses.isEmpty) return const SizedBox.shrink();
+                    if (addresses.isEmpty) {
+                      return InkWell(
+                        onTap: _showAddAddressSheet,
+                        borderRadius: BorderRadius.circular(14),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFAF3EC),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.add_location_alt_rounded, color: AppColors.primary, size: 20),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  '+ Add Delivery Address with PIN code (0/5)',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                              ),
+                              const Icon(Icons.chevron_right_rounded, color: AppColors.primary, size: 18),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
+
                     return SizedBox(
-                      height: 84,
+                      height: 94,
                       child: ListView.builder(
                         scrollDirection: Axis.horizontal,
-                        itemCount: addresses.length,
+                        itemCount: addresses.length + (addresses.length < 5 ? 1 : 0),
                         itemBuilder: (ctx, i) {
+                          if (i == addresses.length) {
+                            return GestureDetector(
+                              onTap: _showAddAddressSheet,
+                              child: Container(
+                                width: 130,
+                                margin: const EdgeInsets.only(right: 12, bottom: 4),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFAF3EC),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                                ),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(Icons.add_circle_outline_rounded, color: AppColors.primary, size: 22),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '+ Add Address',
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                    Text(
+                                      '(${addresses.length}/5)',
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 10,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }
+
                           final addr = addresses[i];
                           final isSelected = _selectedAddressId == addr.id;
                           return GestureDetector(
                             onTap: () => _selectAddress(addr),
                             child: Container(
-                              width: 220,
+                              width: 230,
                               margin: const EdgeInsets.only(right: 12, bottom: 4),
                               padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(12),
+                                color: isSelected ? const Color(0xFFFBF4F0) : Colors.white,
+                                borderRadius: BorderRadius.circular(14),
                                 border: Border.all(
                                   color: isSelected ? AppColors.primary : AppColors.border,
                                   width: isSelected ? 2 : 1,
                                 ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.03),
+                                    blurRadius: 6,
+                                  ),
+                                ],
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -462,11 +454,35 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                         decoration: BoxDecoration(
-                                          color: AppColors.primary.withValues(alpha: 0.1),
+                                          color: AppColors.primary.withValues(alpha: 0.12),
                                           borderRadius: BorderRadius.circular(4),
                                         ),
-                                        child: Text(addr.label, style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                                        child: Text(
+                                          addr.label.toUpperCase(),
+                                          style: GoogleFonts.plusJakartaSans(
+                                            fontSize: 9.5,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.primary,
+                                          ),
+                                        ),
                                       ),
+                                      const SizedBox(width: 6),
+                                      if (addr.isDefault)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF2A7B54).withValues(alpha: 0.12),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            'DEFAULT',
+                                            style: GoogleFonts.plusJakartaSans(
+                                              fontSize: 8.5,
+                                              fontWeight: FontWeight.bold,
+                                              color: const Color(0xFF2A7B54),
+                                            ),
+                                          ),
+                                        ),
                                       const Spacer(),
                                       if (isSelected)
                                         const Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 16),
@@ -474,15 +490,15 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    addr.name,
-                                    style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold),
+                                    '${addr.name} • ${addr.phone}',
+                                    style: GoogleFonts.plusJakartaSans(fontSize: 11.5, fontWeight: FontWeight.bold),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                   Text(
                                     addr.formattedAddress,
-                                    style: GoogleFonts.lato(fontSize: 11, color: AppColors.textSecondary),
-                                    maxLines: 1,
+                                    style: GoogleFonts.plusJakartaSans(fontSize: 10.5, color: AppColors.textSecondary),
+                                    maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ],
@@ -601,18 +617,138 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                 _sectionTitle('💳 Payment Method'),
                 const SizedBox(height: 12),
 
-                _paymentOption(
-                  value: 'razorpay',
-                  title: 'Pay Online',
-                  subtitle: 'UPI, Cards, NetBanking, Wallets',
-                  icon: Icons.payment_rounded,
-                ),
-                const SizedBox(height: 10),
-                _paymentOption(
-                  value: 'cod',
-                  title: 'Cash on Delivery',
-                  subtitle: 'Pay when your order arrives',
-                  icon: Icons.local_atm_rounded,
+                Builder(
+                  builder: (context) {
+                    final sellerWithUpi = items.where((it) => it.product.sellerUpiId.isNotEmpty).firstOrNull;
+                    final artisanUpi = sellerWithUpi?.product.sellerUpiId;
+                    final artisanStore = sellerWithUpi?.product.sellerStore.isNotEmpty == true
+                        ? sellerWithUpi!.product.sellerStore
+                        : (items.isNotEmpty ? items.first.product.sellerStore : 'Artisan Workshop');
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (artisanUpi != null && artisanUpi.isNotEmpty) ...[
+                          _paymentOption(
+                            value: 'seller_upi',
+                            title: 'Direct Artisan UPI (0% Fee)',
+                            subtitle: 'Pay directly to $artisanStore via GPay / PhonePe / Paytm',
+                            icon: Icons.qr_code_2_rounded,
+                            badgeText: 'DIRECT TO ARTISAN',
+                          ),
+                          if (_paymentMethod == 'seller_upi')
+                            Container(
+                              margin: const EdgeInsets.only(top: 8, bottom: 8),
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFAF3EC),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: const Color(0xFF2A7B54).withValues(alpha: 0.35)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(6),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF2A7B54).withValues(alpha: 0.12),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(Icons.verified_user_rounded, color: Color(0xFF2A7B54), size: 16),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          'Artisan UPI: $artisanUpi',
+                                          style: GoogleFonts.plusJakartaSans(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                            color: const Color(0xFF261017),
+                                          ),
+                                        ),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.copy_rounded, size: 18, color: AppColors.primary),
+                                        tooltip: 'Copy UPI ID',
+                                        onPressed: () {
+                                          Clipboard.setData(ClipboardData(text: artisanUpi));
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(content: Text('Artisan UPI ID copied!')),
+                                          );
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'Pay ₹${finalTotal.toStringAsFixed(0)} directly to $artisanStore. Tap below to launch your UPI app or scan QR.',
+                                    style: GoogleFonts.plusJakartaSans(fontSize: 11.5, color: AppColors.textSecondary),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: ElevatedButton.icon(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(0xFF2A7B54),
+                                        foregroundColor: Colors.white,
+                                        elevation: 0,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                        padding: const EdgeInsets.symmetric(vertical: 11),
+                                      ),
+                                      icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                                      label: Text(
+                                        'Pay ₹${finalTotal.toStringAsFixed(0)} via UPI App',
+                                        style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.bold),
+                                      ),
+                                      onPressed: () async {
+                                        final uri = Uri.parse(
+                                          'upi://pay?pa=$artisanUpi&pn=${Uri.encodeComponent(artisanStore)}&am=${finalTotal.toStringAsFixed(2)}&cu=INR&tn=SheeshOrder',
+                                        );
+                                        try {
+                                          if (await canLaunchUrl(uri)) {
+                                            await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                          } else {
+                                            Clipboard.setData(ClipboardData(text: artisanUpi));
+                                            if (context.mounted) {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                const SnackBar(content: Text('UPI ID copied! Open your UPI app and paste.')),
+                                              );
+                                            }
+                                          }
+                                        } catch (_) {
+                                          Clipboard.setData(ClipboardData(text: artisanUpi));
+                                          if (context.mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(content: Text('UPI ID copied to clipboard!')),
+                                            );
+                                          }
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          const SizedBox(height: 10),
+                        ],
+                        _paymentOption(
+                          value: 'razorpay',
+                          title: 'Pay Online',
+                          subtitle: 'UPI, Cards, NetBanking, Wallets',
+                          icon: Icons.payment_rounded,
+                        ),
+                        const SizedBox(height: 10),
+                        _paymentOption(
+                          value: 'cod',
+                          title: 'Cash on Delivery',
+                          subtitle: 'Pay when your order arrives',
+                          icon: Icons.local_atm_rounded,
+                        ),
+                      ],
+                    );
+                  },
                 ),
 
                 const SizedBox(height: 28),
@@ -747,7 +883,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                     child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
                   )
                 : Text(
-                    _paymentMethod == 'cod' ? 'Place Order (COD)' : 'Pay Now',
+                    _paymentMethod == 'cod'
+                        ? 'Place Order (COD)'
+                        : (_paymentMethod == 'seller_upi'
+                            ? 'Confirm & Place Order (Direct UPI)'
+                            : 'Pay Now'),
                     style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
           ),
@@ -798,6 +938,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     required String title,
     required String subtitle,
     required IconData icon,
+    String? badgeText,
   }) {
     final isSelected = _paymentMethod == value;
     return GestureDetector(
@@ -824,7 +965,35 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          title,
+                          style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (badgeText != null) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2A7B54).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            badgeText,
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFF2A7B54),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                   Text(subtitle, style: GoogleFonts.poppins(fontSize: 12, color: AppColors.textLight)),
                 ],
               ),
@@ -856,19 +1025,19 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
 // ─── Order Success Screen ─────────────────────────────────────────────────────
 
-class _OrderSuccessScreen extends StatelessWidget {
+class _OrderSuccessScreen extends ConsumerWidget {
   final String orderId;
 
   const _OrderSuccessScreen({required this.orderId});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
         child: Center(
           child: Padding(
-            padding: const EdgeInsets.all(32),
+            padding: const EdgeInsets.all(28),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -884,44 +1053,111 @@ class _OrderSuccessScreen extends StatelessWidget {
                 const SizedBox(height: 24),
                 Text(
                   'Order Placed! 🎉',
-                  style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.w700),
+                  style: GoogleFonts.playfairDisplay(fontSize: 26, fontWeight: FontWeight.bold),
                 ).animate().fadeIn(delay: 200.ms),
                 const SizedBox(height: 8),
                 Text(
                   'Thank you for supporting Moradabad women artisans. Your order has been notified.',
                   textAlign: TextAlign.center,
-                  style: GoogleFonts.poppins(fontSize: 14, color: AppColors.textLight),
+                  style: GoogleFonts.plusJakartaSans(fontSize: 13.5, color: AppColors.textSecondary, height: 1.4),
                 ).animate().fadeIn(delay: 300.ms),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   decoration: BoxDecoration(
                     color: AppColors.background,
                     borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.border),
                   ),
                   child: Text(
-                    'Order ID: #${orderId.substring(0, 8).toUpperCase()}',
-                    style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13),
+                    'Order ID: #${orderId.length > 8 ? orderId.substring(0, 8).toUpperCase() : orderId}',
+                    style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textPrimary),
                   ),
                 ).animate().fadeIn(delay: 400.ms),
-                const SizedBox(height: 40),
+                const SizedBox(height: 36),
+
+                // Button 1: Live Track Order (Standalone Page)
                 SizedBox(
                   width: double.infinity,
-                  height: 52,
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.pop(context),
+                  height: 50,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      final orders = ref.read(ordersProvider).valueOrNull ?? [];
+                      final matched = orders.where((o) => o.id == orderId || o.orderNumber == orderId).firstOrNull;
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => OrderTrackingScreen(
+                            order: matched,
+                            initialAwbNumber: 'SHS-${orderId.length > 6 ? orderId.substring(0, 6).toUpperCase() : "784920"}',
+                          ),
+                        ),
+                      );
+                    },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
+                      backgroundColor: const Color(0xFF5A1629),
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      elevation: 0,
+                      elevation: 2,
                     ),
-                    child: Text(
-                      'Continue Shopping',
-                      style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 15),
+                    icon: const Icon(Icons.location_on_rounded, size: 18),
+                    label: Text(
+                      'Live Track Order 🚚',
+                      style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 14),
                     ),
                   ),
                 ).animate().fadeIn(delay: 500.ms),
+
+                const SizedBox(height: 10),
+
+                // Button 2: View Order Details
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      final orders = ref.read(ordersProvider).valueOrNull ?? [];
+                      final matched = orders.where((o) => o.id == orderId || o.orderNumber == orderId).firstOrNull;
+                      if (matched != null) {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(builder: (_) => OrderDetailScreen(order: matched)),
+                        );
+                      } else {
+                        Navigator.pop(context);
+                      }
+                    },
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF5A1629),
+                      side: const BorderSide(color: Color(0xFF5A1629)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    icon: const Icon(Icons.receipt_long_rounded, size: 17),
+                    label: Text(
+                      'View Order Receipt & Items',
+                      style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 13.5),
+                    ),
+                  ),
+                ).animate().fadeIn(delay: 550.ms),
+
+                const SizedBox(height: 10),
+
+                // Button 3: Continue Shopping
+                SizedBox(
+                  width: double.infinity,
+                  height: 46,
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(
+                      'Continue Shopping 🛍️',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ).animate().fadeIn(delay: 600.ms),
               ],
             ),
           ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../theme/app_theme.dart';
+import '../../models/seller.dart';
 import '../../models/product.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/products_provider.dart';
@@ -9,6 +10,7 @@ import '../../services/api_service.dart';
 import '../../widgets/sheesh_app_bar.dart';
 import '../../widgets/network_image_fallback.dart';
 import 'add_product_screen.dart';
+import 'seller_subscription_screen.dart';
 
 class SellerProductsScreen extends ConsumerWidget {
   const SellerProductsScreen({super.key});
@@ -38,6 +40,13 @@ class SellerProductsScreen extends ConsumerWidget {
           style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
         ),
         onPressed: () async {
+          final seller = auth.sellerProfile;
+          final currentProducts = productsAsync.valueOrNull ?? [];
+          if (seller != null && currentProducts.length >= seller.maxProducts) {
+            _showLimitReachedDialog(context, seller, currentProducts.length);
+            return;
+          }
+
           await Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const AddProductScreen()),
           );
@@ -67,26 +76,86 @@ class SellerProductsScreen extends ConsumerWidget {
               ],
             ),
           ),
-          data: (products) => products.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
+          data: (products) {
+            final seller = auth.sellerProfile;
+            return Column(
+              children: [
+                // Plan usage bar
+                Container(
+                  margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: seller != null && seller.isPlan399
+                        ? const Color(0xFFC89B3C).withValues(alpha: 0.12)
+                        : const Color(0xFF5A1629).withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: seller != null && seller.isPlan399
+                          ? const Color(0xFFC89B3C).withValues(alpha: 0.3)
+                          : const Color(0xFF5A1629).withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: Row(
                     children: [
-                      const Icon(Icons.inventory_2_outlined, size: 64, color: AppColors.textLight),
-                      const SizedBox(height: 16),
                       Text(
-                        'No products listed yet',
-                        style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold),
+                        seller != null && seller.isPlan399
+                            ? '👑'
+                            : (seller != null && seller.isPlan199 ? '🌟' : '📦'),
+                        style: const TextStyle(fontSize: 16),
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Tap "+ Add Product" to publish your first handcrafted piece.',
-                        style: GoogleFonts.lato(fontSize: 12, color: AppColors.textSecondary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '${seller?.planDisplayName ?? "Free Plan"}: ${products.length} / ${seller != null && seller.isPlan399 ? "Unlimited" : (seller?.maxProducts ?? 2)} products',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF261017),
+                          ),
+                        ),
+                      ),
+                      InkWell(
+                        onTap: () => SellerSubscriptionScreen.show(context),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF5A1629),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            seller != null && seller.isPlan399 ? 'Plan' : 'Upgrade 🚀',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                   ),
-                )
-              : ListView.builder(
+                ),
+                Expanded(
+                  child: products.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.inventory_2_outlined, size: 64, color: AppColors.textLight),
+                              const SizedBox(height: 16),
+                              Text(
+                                'No products listed yet',
+                                style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Tap "+ Add Product" to publish your first handcrafted piece.',
+                                style: GoogleFonts.lato(fontSize: 12, color: AppColors.textSecondary),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ListView.builder(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
                   itemCount: products.length,
                   itemBuilder: (context, index) {
@@ -238,7 +307,80 @@ class SellerProductsScreen extends ConsumerWidget {
                     );
                   },
                 ),
+              ),
+            ],
+          );
+        },
+      ),
+    ),
+  );
+}
+
+  void _showLimitReachedDialog(BuildContext context, Seller seller, int currentCount) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Text('⚠️', style: TextStyle(fontSize: 22)),
+            const SizedBox(width: 8),
+            Text(
+              'Product Limit Reached',
+              style: GoogleFonts.playfairDisplay(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+          ],
         ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Your current ${seller.planDisplayName} allows up to ${seller.maxProducts} active product listings.',
+              style: GoogleFonts.plusJakartaSans(fontSize: 13, height: 1.4),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFAF3EC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFEEDCD4)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Available Upgrades:',
+                    style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 6),
+                  Text('• ₹199 Plan: Up to 10 products + customize storefront', style: GoogleFonts.plusJakartaSans(fontSize: 11.5)),
+                  const SizedBox(height: 4),
+                  Text('• ₹399 Plan: Unlimited products + Home Page She-Preneur feature', style: GoogleFonts.plusJakartaSans(fontSize: 11.5, fontWeight: FontWeight.bold, color: const Color(0xFFC89B3C))),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Close', style: GoogleFonts.plusJakartaSans(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF5A1629),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              SellerSubscriptionScreen.show(context);
+            },
+            child: Text('Upgrade Plan 🚀', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
     );
   }

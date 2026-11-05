@@ -1,19 +1,26 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/product.dart';
 import '../models/category.dart';
 import '../models/seller.dart';
 import '../services/api_service.dart';
-import '../data/mock_data.dart';
+import '../services/supabase_service.dart';
+import 'cart_provider.dart';
 
 // ─── Categories ───────────────────────────────────────────────────────────────
 
 final categoriesProvider = FutureProvider<List<Category>>((ref) async {
   try {
     final data = await apiService.get('/categories') as List<dynamic>;
-    final list = data.map((e) => Category.fromJson(e as Map<String, dynamic>)).toList();
-    return list.isNotEmpty ? list : MockData.mockCategories;
+    return data.map((e) => Category.fromJson(e as Map<String, dynamic>)).toList();
   } catch (_) {
-    return MockData.mockCategories;
+    try {
+      final res = await SupabaseService.client.from('categories').select('*').eq('is_active', true).order('sort_order');
+      if (res is List) {
+        return (res as List).map((e) => Category.fromJson(e as Map<String, dynamic>)).toList();
+      }
+    } catch (_) {}
+    return [];
   }
 });
 
@@ -56,27 +63,6 @@ class ProductsNotifier extends StateNotifier<AsyncValue<List<Product>>> {
 
   ProductsFilter _filter = const ProductsFilter();
 
-  List<Product> _filterMockProducts(ProductsFilter f) {
-    var list = MockData.mockProducts;
-    if (f.categoryId != null && f.categoryId!.isNotEmpty) {
-      list = list.where((p) => p.categoryId == f.categoryId).toList();
-    }
-    if (f.sellerId != null && f.sellerId!.isNotEmpty) {
-      list = list.where((p) => p.sellerId == f.sellerId).toList();
-    }
-    if (f.isFeatured == true) {
-      list = list.where((p) => p.isFeatured).toList();
-    }
-    if (f.search != null && f.search!.isNotEmpty) {
-      final q = f.search!.toLowerCase();
-      list = list.where((p) =>
-          p.name.toLowerCase().contains(q) ||
-          p.description.toLowerCase().contains(q) ||
-          p.tags.any((t) => t.toLowerCase().contains(q))).toList();
-    }
-    return list;
-  }
-
   Future<void> load({ProductsFilter? filter}) async {
     if (filter != null) _filter = filter;
     state = const AsyncValue.loading();
@@ -85,18 +71,27 @@ class ProductsNotifier extends StateNotifier<AsyncValue<List<Product>>> {
       final list = (data['data'] as List<dynamic>)
           .map((e) => Product.fromJson(e as Map<String, dynamic>))
           .toList();
-      if (list.isNotEmpty) {
-        state = AsyncValue.data(list);
-      } else {
-        state = AsyncValue.data(_filterMockProducts(_filter));
-      }
+      state = AsyncValue.data(list);
     } catch (e, st) {
-      final fallback = _filterMockProducts(_filter);
-      if (fallback.isNotEmpty) {
-        state = AsyncValue.data(fallback);
-      } else {
-        state = AsyncValue.error(e, st);
-      }
+      // Fallback: direct Supabase select
+      try {
+        dynamic query = SupabaseService.client
+            .from('products')
+            .select('*, product_images(url, sort_order), sellers(store_name, location, is_verified)');
+        if (_filter.categoryId != null) {
+          query = query.eq('category_id', _filter.categoryId!);
+        }
+        if (_filter.search != null && _filter.search!.isNotEmpty) {
+          query = query.ilike('name', '%${_filter.search}%');
+        }
+        final res = await query.order('created_at', ascending: false).limit(_filter.pageSize);
+        if (res is List) {
+          final list = (res as List).map((e) => Product.fromJson(e as Map<String, dynamic>)).toList();
+          state = AsyncValue.data(list);
+          return;
+        }
+      } catch (_) {}
+      state = AsyncValue.error(e, st);
     }
   }
 
@@ -124,10 +119,9 @@ final productsProvider =
 final featuredProductsProvider = FutureProvider<List<Product>>((ref) async {
   try {
     final data = await apiService.get('/products/featured') as List<dynamic>;
-    final list = data.map((e) => Product.fromJson(e as Map<String, dynamic>)).toList();
-    return list.isNotEmpty ? list : MockData.mockProducts.where((p) => p.isFeatured).toList();
+    return data.map((e) => Product.fromJson(e as Map<String, dynamic>)).toList();
   } catch (_) {
-    return MockData.mockProducts.where((p) => p.isFeatured).toList();
+    return [];
   }
 });
 
@@ -137,24 +131,57 @@ final productDetailProvider = FutureProvider.family<Product?, String>((ref, id) 
     final data = await apiService.get('/products/$id');
     return Product.fromJson(data as Map<String, dynamic>);
   } catch (_) {
-    try {
-      return MockData.mockProducts.firstWhere((p) => p.id == id);
-    } catch (_) {
-      return MockData.mockProducts.isNotEmpty ? MockData.mockProducts.first : null;
-    }
+    return null;
   }
 });
 
 // ─── Sellers ──────────────────────────────────────────────────────────────────
 
+/// Provides all registered artisan storefronts from backend or Supabase
+final allSellersProvider = FutureProvider<List<Seller>>((ref) async {
+  try {
+    final data = await apiService.get('/sellers');
+    if (data is List) {
+      final list = data.map((e) => Seller.fromJson(e as Map<String, dynamic>)).toList();
+      if (list.isNotEmpty) return list;
+    }
+  } catch (_) {}
+
+  // Direct Supabase fallback: query sellers table directly
+  try {
+    final res = await SupabaseService.client
+        .from('sellers')
+        .select('*, users(full_name, avatar_url)')
+        .order('rating', ascending: false);
+    if (res is List) {
+      return (res as List).map((e) => Seller.fromJson(e as Map<String, dynamic>)).toList();
+    }
+  } catch (_) {}
+
+  return [];
+});
+
 final featuredSellersProvider = FutureProvider<List<Seller>>((ref) async {
   try {
     final data = await apiService.get('/sellers', params: {'is_featured': true}) as List<dynamic>;
     final list = data.map((e) => Seller.fromJson(e as Map<String, dynamic>)).toList();
-    return list.isNotEmpty ? list : MockData.mockSellers;
-  } catch (_) {
-    return MockData.mockSellers;
-  }
+    if (list.isNotEmpty) return list;
+  } catch (_) {}
+
+  // Direct Supabase fallback
+  try {
+    final res = await SupabaseService.client
+        .from('sellers')
+        .select('*, users(full_name, avatar_url)')
+        .eq('is_featured', true)
+        .order('rating', ascending: false);
+    if (res is List && (res as List).isNotEmpty) {
+      return (res as List).map((e) => Seller.fromJson(e as Map<String, dynamic>)).toList();
+    }
+  } catch (_) {}
+
+  // Fallback to all sellers so explore & home never appear empty
+  return await ref.watch(allSellersProvider.future);
 });
 
 final sellerDetailProvider = FutureProvider.family<Seller?, String>((ref, id) async {
@@ -162,24 +189,20 @@ final sellerDetailProvider = FutureProvider.family<Seller?, String>((ref, id) as
     final data = await apiService.get('/sellers/$id');
     return Seller.fromJson(data as Map<String, dynamic>);
   } catch (_) {
-    try {
-      return MockData.mockSellers.firstWhere((s) => s.id == id);
-    } catch (_) {
-      return MockData.mockSellers.isNotEmpty ? MockData.mockSellers.first : null;
-    }
+    return null;
   }
 });
 
 final sellerProductsProvider = FutureProvider.family<List<Product>, String>((ref, sellerId) async {
-  if (sellerId.isEmpty) return MockData.mockProducts.take(4).toList();
+  if (sellerId.isEmpty) return [];
   try {
     final data = await apiService.get('/sellers/$sellerId/products');
-    if (data is List && data.isNotEmpty) {
+    if (data is List) {
       return data.map((e) => Product.fromJson(e as Map<String, dynamic>)).toList();
     }
-    return MockData.getProductsForSeller(sellerId);
+    return [];
   } catch (_) {
-    return MockData.getProductsForSeller(sellerId);
+    return [];
   }
 });
 
@@ -192,15 +215,110 @@ final searchResultsProvider = FutureProvider<List<Product>>((ref) async {
   if (query.isEmpty) return [];
   try {
     final data = await apiService.get('/products', params: {'search': query}) as Map<String, dynamic>;
-    final list = (data['data'] as List<dynamic>).map((e) => Product.fromJson(e as Map<String, dynamic>)).toList();
-    if (list.isNotEmpty) return list;
+    return (data['data'] as List<dynamic>).map((e) => Product.fromJson(e as Map<String, dynamic>)).toList();
+  } catch (_) {
+    return [];
+  }
+});
+
+// ─── Artisan of the Week ──────────────────────────────────────────────────────
+
+final artisanOfTheWeekProvider = FutureProvider<Seller?>((ref) async {
+  try {
+    final data = await apiService.get('/sellers/artisan-of-the-week');
+    if (data is Map<String, dynamic>) {
+      return Seller.fromJson(data);
+    }
   } catch (_) {}
 
-  final q = query.toLowerCase();
-  return MockData.mockProducts
-      .where((p) =>
-          p.name.toLowerCase().contains(q) ||
-          p.description.toLowerCase().contains(q) ||
-          p.tags.any((t) => t.toLowerCase().contains(q)))
-      .toList();
+  // Fallback: pick the top seller from live featured sellers
+  try {
+    final sellers = await ref.watch(featuredSellersProvider.future);
+    if (sellers.isNotEmpty) {
+      final sorted = List<Seller>.from(sellers)
+        ..sort((a, b) => (b.reviewsCount + (b.weeklyViews)).compareTo(a.reviewsCount + (a.weeklyViews)));
+      return sorted.first;
+    }
+  } catch (_) {}
+
+  return null;
+});
+
+// ─── Personalized Products (Previous Searches & Likings) ──────────────────────
+
+class PersonalizedState {
+  final List<Product> products;
+  final String reason;
+
+  const PersonalizedState({
+    required this.products,
+    required this.reason,
+  });
+}
+
+final personalizedProductsProvider = FutureProvider<PersonalizedState>((ref) async {
+  final allProductsAsync = ref.watch(productsProvider);
+  final allProducts = allProductsAsync.value ?? [];
+  if (allProducts.isEmpty) {
+    return const PersonalizedState(products: [], reason: 'Curated for you');
+  }
+
+  final wishlist = ref.watch(wishlistProvider);
+  final prefs = await SharedPreferences.getInstance();
+  final recentSearches = prefs.getStringList('sheesh_recent_searches') ?? [];
+
+  List<Product> matched = [];
+  String reason = 'Curated for you';
+
+  // 1. Try matching by recent searches
+  if (recentSearches.isNotEmpty) {
+    for (final rawSearch in recentSearches) {
+      final topSearch = rawSearch.toLowerCase().trim();
+      final searchTerms = topSearch.split(RegExp(r'\s+')).where((s) => s.length > 2).toList();
+      if (searchTerms.isEmpty) continue;
+
+      final searchMatched = allProducts.where((p) {
+        final text = '${p.name} ${p.description} ${p.categoryId} ${p.tags.join(" ")}'.toLowerCase();
+        return searchTerms.any((term) => text.contains(term));
+      }).toList();
+
+      if (searchMatched.isNotEmpty) {
+        matched = searchMatched;
+        reason = 'Inspired by your search for "$rawSearch"';
+        break;
+      }
+    }
+  }
+
+  // 2. If no search match, try matching by wishlist / likings
+  if (matched.isEmpty && wishlist.isNotEmpty) {
+    final likedProducts = allProducts.where((p) => wishlist.contains(p.id)).toList();
+    final likedCategories = likedProducts.map((p) => p.categoryId).toSet();
+    final likedTags = likedProducts.expand((p) => p.tags).map((t) => t.toLowerCase()).toSet();
+
+    matched = allProducts.where((p) {
+      if (wishlist.contains(p.id)) return false; // Suggest new things, not already saved
+      if (likedCategories.contains(p.categoryId)) return true;
+      return p.tags.any((t) => likedTags.contains(t.toLowerCase()));
+    }).toList();
+
+    if (matched.isNotEmpty) {
+      reason = 'Based on your saved artisan crafts';
+    }
+  }
+
+  // 3. Fallback: diverse random selection across categories
+  if (matched.isEmpty) {
+    matched = List<Product>.from(allProducts);
+    reason = 'Recommended artisan creations for you';
+  }
+
+  // Randomize / shuffle the matched items so buyer gets a fresh discovery each time
+  final randomized = List<Product>.from(matched)..shuffle();
+  final finalProducts = randomized.take(6).toList();
+
+  return PersonalizedState(
+    products: finalProducts,
+    reason: reason,
+  );
 });

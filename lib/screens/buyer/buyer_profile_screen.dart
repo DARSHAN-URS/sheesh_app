@@ -7,8 +7,21 @@ import '../../providers/orders_provider.dart';
 import '../../providers/cart_provider.dart';
 import '../../widgets/sheesh_app_bar.dart';
 import 'cart_screen.dart';
+import 'orders_screen.dart';
+import 'order_tracking_screen.dart';
+import 'dart:io';
 import '../auth/login_screen.dart';
 import '../../models/seller.dart';
+import '../seller/create_store_screen.dart';
+import '../seller/seller_onboarding_screen.dart';
+import 'package:image_picker/image_picker.dart';
+import '../../widgets/network_image_fallback.dart';
+import '../../widgets/store_photo_picker_sheet.dart';
+import '../../providers/addresses_provider.dart';
+import '../../widgets/addresses_manager_sheet.dart';
+import '../../services/storage_service.dart';
+import '../../utils/share_helper.dart';
+import '../legal/privacy_policy_screen.dart';
 
 /// Provider to allow child screens (like Profile) to switch tabs in BuyerMainScreen
 final buyerTabIndexProvider = StateProvider<int>((ref) => 0);
@@ -22,6 +35,7 @@ class BuyerProfileScreen extends ConsumerWidget {
     final orders = ref.watch(ordersProvider).value ?? [];
     final wishlist = ref.watch(wishlistProvider);
     final cartItems = ref.watch(cartProvider).value ?? [];
+    final addresses = ref.watch(addressesProvider).valueOrNull ?? [];
 
     final userName = auth.fullName.isNotEmpty ? auth.fullName : 'Valued Shopper';
     final userEmail = auth.supabaseUser?.email ?? 'Shopper Account';
@@ -58,66 +72,81 @@ class BuyerProfileScreen extends ConsumerWidget {
                 children: [
                   Row(
                     children: [
-                      // Avatar
-                      Container(
-                        width: 64,
-                        height: 64,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: AppColors.primaryGradient,
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.primary.withValues(alpha: 0.2),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: ClipOval(
-                          child: auth.avatarUrl != null && auth.avatarUrl!.isNotEmpty
-                              ? Image.network(
-                                  auth.avatarUrl!,
-                                  width: 64,
-                                  height: 64,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) => Center(
-                                    child: Text(
-                                      userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 26,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
-                                      ),
-                                    ),
+                      // Interactive Avatar with Camera Edit Badge
+                      GestureDetector(
+                        onTap: () => _showMediaAvatarPicker(context, ref, auth),
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Container(
+                              width: 68,
+                              height: 68,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: AppColors.primaryGradient,
+                                border: Border.all(color: Colors.white, width: 2),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppColors.primary.withValues(alpha: 0.22),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 4),
                                   ),
-                                  loadingBuilder: (context, child, loadingProgress) {
-                                    if (loadingProgress == null) return child;
-                                    return Center(
-                                      child: SizedBox(
-                                        width: 24,
-                                        height: 24,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-                                          value: loadingProgress.expectedTotalBytes != null
-                                              ? loadingProgress.cumulativeBytesLoaded /
-                                                  loadingProgress.expectedTotalBytes!
-                                              : null,
+                                ],
+                              ),
+                              child: ClipOval(
+                                child: auth.avatarUrl != null && auth.avatarUrl!.isNotEmpty
+                                    ? NetworkImageFallback(
+                                        imageUrl: auth.avatarUrl!,
+                                        width: 68,
+                                        height: 68,
+                                        fit: BoxFit.cover,
+                                        fallbackIcon: Center(
+                                          child: Text(
+                                            userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 26,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ),
+                                      )
+                                    : Center(
+                                        child: Text(
+                                          userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 26,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                          ),
                                         ),
                                       ),
-                                    );
-                                  },
-                                )
-                              : Center(
-                                  child: Text(
-                                    userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 26,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
+                              ),
+                            ),
+                            Positioned(
+                              bottom: -2,
+                              right: -2,
+                              child: Container(
+                                padding: const EdgeInsets.all(5),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.white, width: 2),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.18),
+                                      blurRadius: 4,
                                     ),
-                                  ),
+                                  ],
                                 ),
+                                child: const Icon(
+                                  Icons.camera_alt_rounded,
+                                  size: 13,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(width: 16),
@@ -158,33 +187,40 @@ class BuyerProfileScreen extends ConsumerWidget {
                               ),
                             ],
                             const SizedBox(height: 6),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 4,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.gold.withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(Icons.location_on, size: 11, color: AppColors.goldDark),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        userCity,
-                                        style: GoogleFonts.poppins(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
-                                          color: AppColors.goldDark,
-                                        ),
-                                      ),
-                                    ],
+                            GestureDetector(
+                              onTap: () => AddressesManagerSheet.show(context: context),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: AppColors.gold.withValues(alpha: 0.14),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: AppColors.goldDark.withValues(alpha: 0.25),
+                                    width: 0.8,
                                   ),
                                 ),
-                              ],
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.location_on, size: 12, color: AppColors.goldDark),
+                                    const SizedBox(width: 4),
+                                    Flexible(
+                                      child: Text(
+                                        userCity,
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.goldDark,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 3),
+                                    const Icon(Icons.keyboard_arrow_down_rounded, size: 13, color: AppColors.goldDark),
+                                  ],
+                                ),
+                              ),
                             ),
                           ],
                         ),
@@ -226,16 +262,21 @@ class BuyerProfileScreen extends ConsumerWidget {
                         label: 'Orders',
                         icon: Icons.local_shipping_outlined,
                         onTap: () {
-                          ref.read(buyerTabIndexProvider.notifier).state = 2;
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const OrdersScreen(showBackButton: true),
+                            ),
+                          );
                         },
                       ),
                       Container(width: 1, height: 32, color: AppColors.border),
                       _buildStatItem(
                         context,
                         count: '${wishlist.length}',
-                        label: 'Saved',
+                        label: 'Wishlist',
                         icon: Icons.favorite_border_rounded,
                         onTap: () {
+                          ref.read(cartSubTabProvider.notifier).state = 1;
                           ref.read(buyerTabIndexProvider.notifier).state = 2;
                         },
                       ),
@@ -243,12 +284,11 @@ class BuyerProfileScreen extends ConsumerWidget {
                       _buildStatItem(
                         context,
                         count: '${cartItems.length}',
-                        label: 'Cart',
+                        label: 'Cart Bag',
                         icon: Icons.shopping_bag_outlined,
                         onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(builder: (_) => const CartScreen()),
-                          );
+                          ref.read(cartSubTabProvider.notifier).state = 0;
+                          ref.read(buyerTabIndexProvider.notifier).state = 2;
                         },
                       ),
                     ],
@@ -339,7 +379,10 @@ class BuyerProfileScreen extends ConsumerWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                auth.sellerProfile?.storeName ?? 'My Sheesh Store',
+                                auth.sellerProfile?.storeName ??
+                                    (auth.fullName.isNotEmpty && auth.fullName != 'User'
+                                        ? "${auth.fullName}'s Store"
+                                        : 'My Artisan Store'),
                                 style: GoogleFonts.poppins(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
@@ -349,7 +392,7 @@ class BuyerProfileScreen extends ConsumerWidget {
                               Text(
                                 auth.sellerProfile?.tagline.isNotEmpty == true
                                     ? auth.sellerProfile!.tagline
-                                    : 'Handcrafted in Moradabad, UP',
+                                    : 'Handcrafted Creations',
                                 style: GoogleFonts.lato(fontSize: 12, color: AppColors.textSecondary),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -454,10 +497,17 @@ class BuyerProfileScreen extends ConsumerWidget {
                             elevation: 0,
                           ),
                           onPressed: () {
-                            ref.read(isSellerModeProvider.notifier).state = true;
+                            if (auth.sellerProfile != null) {
+                              ref.read(isSellerModeProvider.notifier).state = true;
+                            } else {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const SellerOnboardingScreen()),
+                              );
+                            }
                           },
                           child: Text(
-                            'View Seller Side 🏪',
+                            auth.sellerProfile != null ? 'View Seller Side 🏪' : 'Become a Seller 🚀',
                             style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold),
                           ),
                         ),
@@ -469,9 +519,14 @@ class BuyerProfileScreen extends ConsumerWidget {
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
-                          onPressed: () => _showBecomeSellerModal(context, ref),
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const SellerOnboardingScreen()),
+                            );
+                          },
                           child: Text(
-                            'Register Store',
+                            'Seller Onboarding ✨',
                             style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.w600),
                           ),
                         ),
@@ -496,28 +551,50 @@ class BuyerProfileScreen extends ConsumerWidget {
                 child: Column(
                   children: [
                   _buildMenuTile(
-                    icon: Icons.local_shipping_outlined,
-                    title: 'My Orders & Tracking',
-                    subtitle: 'View live order status & history',
+                    icon: Icons.map_outlined,
+                    title: 'Live Order Tracking 🚚',
+                    subtitle: 'Track courier GPS transit, live ETA & delivery OTP',
                     onTap: () {
-                      ref.read(buyerTabIndexProvider.notifier).state = 2;
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const OrderTrackingScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  const Divider(height: 1, indent: 56, endIndent: 16, color: AppColors.border),
+                  _buildMenuTile(
+                    icon: Icons.local_shipping_outlined,
+                    title: 'My Orders History',
+                    subtitle: orders.isNotEmpty
+                        ? '${orders.length} order(s) placed • Tap to view all orders'
+                        : 'View past and active orders',
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const OrdersScreen(showBackButton: true),
+                        ),
+                      );
                     },
                   ),
                   const Divider(height: 1, indent: 56, endIndent: 16, color: AppColors.border),
                   _buildMenuTile(
                     icon: Icons.favorite_border_rounded,
-                    title: 'Saved Creations',
-                    subtitle: '${wishlist.length} items in wishlist',
+                    title: 'Saved Creations (Wishlist)',
+                    subtitle: '${wishlist.length} item(s) saved in your wishlist',
                     onTap: () {
+                      ref.read(cartSubTabProvider.notifier).state = 1;
                       ref.read(buyerTabIndexProvider.notifier).state = 2;
                     },
                   ),
                   const Divider(height: 1, indent: 56, endIndent: 16, color: AppColors.border),
                   _buildMenuTile(
                     icon: Icons.location_on_outlined,
-                    title: 'Delivery Addresses',
-                    subtitle: 'Manage saved delivery destinations',
-                    onTap: () => _showAddressDialog(context, auth),
+                    title: 'Delivery Addresses (${addresses.length}/5)',
+                    subtitle: addresses.isNotEmpty
+                        ? addresses.first.formattedAddress
+                        : 'Manage up to 5 delivery destinations with PIN code',
+                    onTap: () => AddressesManagerSheet.show(context: context),
                   ),
                   const Divider(height: 1, indent: 56, endIndent: 16, color: AppColors.border),
                   _buildMenuTile(
@@ -529,6 +606,26 @@ class BuyerProfileScreen extends ConsumerWidget {
                         const SnackBar(
                           content: Text('Support helpline: +91 98765 43210 (Mon-Sat 9 AM - 7 PM)'),
                           backgroundColor: AppColors.primary,
+                        ),
+                      );
+                    },
+                  ),
+                  const Divider(height: 1, indent: 56, endIndent: 16, color: AppColors.border),
+                  _buildMenuTile(
+                    icon: Icons.share_rounded,
+                    title: 'Share Sheesh App 📲',
+                    subtitle: 'Invite friends & family to discover Moradabad artisans',
+                    onTap: () => ShareHelper.shareApp(context),
+                  ),
+                  const Divider(height: 1, indent: 56, endIndent: 16, color: AppColors.border),
+                  _buildMenuTile(
+                    icon: Icons.shield_outlined,
+                    title: 'Privacy Policy & Terms 🛡️',
+                    subtitle: 'Data protection, user rights & Google Play compliance',
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const PrivacyPolicyScreen(),
                         ),
                       );
                     },
@@ -547,7 +644,7 @@ class BuyerProfileScreen extends ConsumerWidget {
 
             const SizedBox(height: 20),
 
-            // ─── Sign Out Button ─────────────────────────────────────────────
+            // ─── Sign Out & Delete Account Section ─────────────────────────────
             Container(
               width: double.infinity,
               decoration: BoxDecoration(
@@ -558,29 +655,58 @@ class BuyerProfileScreen extends ConsumerWidget {
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
                 clipBehavior: Clip.antiAlias,
-                child: ListTile(
-                  onTap: () => _confirmSignOut(context, ref),
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.error.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
+                child: Column(
+                  children: [
+                    ListTile(
+                      onTap: () => _confirmSignOut(context, ref),
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.error.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.logout_rounded, color: AppColors.error, size: 20),
+                      ),
+                      title: Text(
+                        'Sign Out',
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.error,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Safely log out of your Sheesh account',
+                        style: GoogleFonts.lato(fontSize: 11, color: AppColors.textSecondary),
+                      ),
+                      trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.error),
                     ),
-                    child: const Icon(Icons.logout_rounded, color: AppColors.error, size: 20),
-                  ),
-                  title: Text(
-                    'Sign Out',
-                    style: GoogleFonts.poppins(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.error,
+                    const Divider(height: 1, indent: 56, endIndent: 16, color: AppColors.border),
+                    ListTile(
+                      onTap: () => _confirmDeleteAccount(context, ref),
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.delete_forever_rounded, color: Colors.black54, size: 20),
+                      ),
+                      title: Text(
+                        'Delete Account 🗑️',
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Permanently erase your account and personal data',
+                        style: GoogleFonts.lato(fontSize: 10.5, color: AppColors.textSecondary),
+                      ),
+                      trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textLight),
                     ),
-                  ),
-                  subtitle: Text(
-                    'Safely log out of your Sheesh account',
-                    style: GoogleFonts.lato(fontSize: 11, color: AppColors.textSecondary),
-                  ),
-                  trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.error),
+                  ],
                 ),
               ),
             ),
@@ -646,6 +772,7 @@ class BuyerProfileScreen extends ConsumerWidget {
     required String title,
     required String subtitle,
     required VoidCallback onTap,
+    Widget? trailing,
   }) {
     return ListTile(
       onTap: onTap,
@@ -665,14 +792,292 @@ class BuyerProfileScreen extends ConsumerWidget {
         subtitle,
         style: GoogleFonts.lato(fontSize: 11, color: AppColors.textSecondary),
       ),
-      trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textLight, size: 20),
+      trailing: trailing ?? const Icon(Icons.chevron_right_rounded, color: AppColors.textLight, size: 20),
+    );
+  }
+
+  Future<void> _pickAvatarFromMedia(
+    BuildContext context,
+    WidgetRef ref,
+    ImageSource source,
+  ) async {
+    try {
+      final picker = ImagePicker();
+      final XFile? image = await picker.pickImage(
+        source: source,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 85,
+      );
+      if (image != null) {
+        final cloudUrl = await StorageService.uploadImage(
+          file: File(image.path),
+          folder: 'avatars',
+        );
+        await ref.read(authProvider.notifier).updateProfile(avatarUrl: cloudUrl);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Profile picture updated from media! ✓',
+                style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+              backgroundColor: const Color(0xFF2A7B54),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not access media: $e')),
+        );
+      }
+    }
+  }
+
+  void _showMediaAvatarPicker(BuildContext context, WidgetRef ref, AuthState auth, {void Function(String newPath)? onAvatarChanged}) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) => Container(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Change Profile Picture',
+              style: GoogleFonts.playfairDisplay(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            Text(
+              'Choose a photo from your device media or take a new one',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 12,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 18),
+
+            // Gallery Option
+            ListTile(
+              onTap: () async {
+                Navigator.pop(sheetCtx);
+                final picker = ImagePicker();
+                final XFile? image = await picker.pickImage(
+                  source: ImageSource.gallery,
+                  maxWidth: 800,
+                  maxHeight: 800,
+                  imageQuality: 85,
+                );
+                if (image != null) {
+                  final cloudUrl = await StorageService.uploadImage(
+                    file: File(image.path),
+                    folder: 'avatars',
+                  );
+                  if (onAvatarChanged != null) {
+                    onAvatarChanged(cloudUrl);
+                  } else {
+                    await ref.read(authProvider.notifier).updateProfile(avatarUrl: cloudUrl);
+                  }
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Profile picture updated from gallery! ✓',
+                          style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                        backgroundColor: const Color(0xFF2A7B54),
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    );
+                  }
+                }
+              },
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              leading: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.10),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.photo_library_rounded, color: AppColors.primary, size: 22),
+              ),
+              title: Text(
+                'Choose from Gallery / Photos',
+                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+              subtitle: Text(
+                'Pick an existing photo from your media',
+                style: GoogleFonts.plusJakartaSans(fontSize: 12, color: AppColors.textSecondary),
+              ),
+              trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textLight),
+            ),
+
+            const Divider(height: 12, color: AppColors.border),
+
+            // Camera Option
+            ListTile(
+              onTap: () async {
+                Navigator.pop(sheetCtx);
+                final picker = ImagePicker();
+                final XFile? image = await picker.pickImage(
+                  source: ImageSource.camera,
+                  maxWidth: 800,
+                  maxHeight: 800,
+                  imageQuality: 85,
+                );
+                if (image != null) {
+                  final cloudUrl = await StorageService.uploadImage(
+                    file: File(image.path),
+                    folder: 'avatars',
+                  );
+                  if (onAvatarChanged != null) {
+                    onAvatarChanged(cloudUrl);
+                  } else {
+                    await ref.read(authProvider.notifier).updateProfile(avatarUrl: cloudUrl);
+                  }
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Profile picture captured from camera! ✓',
+                          style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                        backgroundColor: const Color(0xFF2A7B54),
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    );
+                  }
+                }
+              },
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              leading: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD64438).withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.camera_alt_rounded, color: Color(0xFFD64438), size: 22),
+              ),
+              title: Text(
+                'Take Photo with Camera',
+                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+              subtitle: Text(
+                'Snap a new profile picture now',
+                style: GoogleFonts.plusJakartaSans(fontSize: 12, color: AppColors.textSecondary),
+              ),
+              trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textLight),
+            ),
+
+            // Sheesh Curated Avatar Option
+            const Divider(height: 12, color: AppColors.border),
+            ListTile(
+              onTap: () {
+                Navigator.pop(sheetCtx);
+                StorePhotoPickerSheet.show(
+                  context: context,
+                  type: StorePhotoType.avatar,
+                  currentUrl: auth.avatarUrl,
+                  onSelected: (newUrl) async {
+                    if (onAvatarChanged != null) {
+                      onAvatarChanged(newUrl);
+                    } else {
+                      await ref.read(authProvider.notifier).updateProfile(avatarUrl: newUrl);
+                    }
+                  },
+                );
+              },
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              leading: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFC89B3C).withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.auto_awesome_rounded, color: Color(0xFFC89B3C), size: 22),
+              ),
+              title: Text(
+                'Choose Sheesh Artisan Avatar',
+                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+              subtitle: Text(
+                'Pick curated heritage portraits or Sheesh emblems',
+                style: GoogleFonts.plusJakartaSans(fontSize: 12, color: AppColors.textSecondary),
+              ),
+              trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textLight),
+            ),
+
+            // Remove photo if present
+            if (auth.avatarUrl != null && auth.avatarUrl!.isNotEmpty) ...[
+              const Divider(height: 12, color: AppColors.border),
+              ListTile(
+                onTap: () async {
+                  Navigator.pop(sheetCtx);
+                  if (onAvatarChanged != null) {
+                    onAvatarChanged('');
+                  } else {
+                    await ref.read(authProvider.notifier).updateProfile(avatarUrl: '');
+                  }
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Profile photo removed.')),
+                    );
+                  }
+                },
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.10),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 22),
+                ),
+                title: Text(
+                  'Remove Profile Photo',
+                  style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.red),
+                ),
+                subtitle: Text(
+                  'Revert to initials avatar',
+                  style: GoogleFonts.plusJakartaSans(fontSize: 12, color: AppColors.textSecondary),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
   void _showEditProfileSheet(BuildContext context, WidgetRef ref, AuthState auth) {
     final nameCtrl = TextEditingController(text: auth.fullName == 'User' ? '' : auth.fullName);
-    final avatarCtrl = TextEditingController(text: auth.avatarUrl ?? '');
     final cityCtrl = TextEditingController(text: auth.city == 'Moradabad, UP' ? '' : auth.city);
+    String? currentAvatar = auth.avatarUrl;
     bool isSaving = false;
 
     showModalBottomSheet(
@@ -683,7 +1088,7 @@ class BuyerProfileScreen extends ConsumerWidget {
         builder: (ctx, setModalState) => Padding(
           padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
           child: Container(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
             decoration: const BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -701,11 +1106,11 @@ class BuyerProfileScreen extends ConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Edit Buyer Profile 🛍️',
+                              'Edit Profile 🛍️',
                               style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold),
                             ),
                             Text(
-                              'Personal shopping identity (distinct from your store)',
+                              'Update your personal details & profile photo',
                               style: GoogleFonts.lato(fontSize: 11, color: AppColors.textSecondary),
                             ),
                           ],
@@ -717,12 +1122,125 @@ class BuyerProfileScreen extends ConsumerWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
+
+                  // Profile Photo Media Picker Widget (No URL link needed)
+                  Center(
+                    child: Column(
+                      children: [
+                        GestureDetector(
+                          onTap: () {
+                            _showMediaAvatarPicker(
+                              context,
+                              ref,
+                              auth,
+                              onAvatarChanged: (newPath) {
+                                setModalState(() => currentAvatar = newPath);
+                              },
+                            );
+                          },
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              Container(
+                                width: 78,
+                                height: 78,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: AppColors.primaryGradient,
+                                  border: Border.all(color: Colors.white, width: 2.5),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: AppColors.primary.withValues(alpha: 0.20),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: ClipOval(
+                                  child: currentAvatar != null && currentAvatar!.isNotEmpty
+                                      ? NetworkImageFallback(
+                                          imageUrl: currentAvatar!,
+                                          width: 78,
+                                          height: 78,
+                                          fit: BoxFit.cover,
+                                        )
+                                      : Center(
+                                          child: Text(
+                                            nameCtrl.text.isNotEmpty ? nameCtrl.text[0].toUpperCase() : 'U',
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 30,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ),
+                                ),
+                              ),
+                              Positioned(
+                                bottom: -2,
+                                right: -2,
+                                child: Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: Colors.white, width: 2),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(alpha: 0.15),
+                                        blurRadius: 4,
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Icon(
+                                    Icons.camera_alt_rounded,
+                                    size: 14,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            _showMediaAvatarPicker(
+                              context,
+                              ref,
+                              auth,
+                              onAvatarChanged: (newPath) {
+                                setModalState(() => currentAvatar = newPath);
+                              },
+                            );
+                          },
+                          icon: const Icon(Icons.photo_library_outlined, size: 15, color: AppColors.primary),
+                          label: Text(
+                            'Change Photo from Media',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: AppColors.border),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 18),
+
                   TextField(
                     controller: nameCtrl,
                     textCapitalization: TextCapitalization.words,
                     decoration: InputDecoration(
-                      labelText: 'Buyer Display Name',
+                      labelText: 'Display Name',
                       labelStyle: GoogleFonts.lato(fontSize: 13),
                       prefixIcon: const Icon(Icons.person_outline_rounded, size: 20),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -730,18 +1248,7 @@ class BuyerProfileScreen extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 14),
-                  TextField(
-                    controller: avatarCtrl,
-                    decoration: InputDecoration(
-                      labelText: 'Personal Profile Photo URL',
-                      hintText: 'https://example.com/my-photo.jpg',
-                      labelStyle: GoogleFonts.lato(fontSize: 13),
-                      prefixIcon: const Icon(Icons.image_outlined, size: 20),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
+
                   TextField(
                     controller: cityCtrl,
                     textCapitalization: TextCapitalization.words,
@@ -754,6 +1261,7 @@ class BuyerProfileScreen extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 20),
+
                   SizedBox(
                     width: double.infinity,
                     height: 50,
@@ -771,16 +1279,14 @@ class BuyerProfileScreen extends ConsumerWidget {
                               try {
                                 await ref.read(authProvider.notifier).updateProfile(
                                       fullName: nameCtrl.text.trim(),
-                                      avatarUrl: avatarCtrl.text.trim().isNotEmpty
-                                          ? avatarCtrl.text.trim()
-                                          : null,
+                                      avatarUrl: currentAvatar,
                                       city: cityCtrl.text.trim(),
                                     );
                                 if (sheetCtx.mounted) Navigator.pop(sheetCtx);
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
-                                      content: Text('Buyer profile updated successfully! ✓'),
+                                      content: Text('Profile updated successfully! ✓'),
                                       backgroundColor: AppColors.success,
                                     ),
                                   );
@@ -804,7 +1310,7 @@ class BuyerProfileScreen extends ConsumerWidget {
                               child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                             )
                           : Text(
-                              'Save Buyer Profile',
+                              'Save Changes',
                               style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 15),
                             ),
                     ),
@@ -994,94 +1500,7 @@ class BuyerProfileScreen extends ConsumerWidget {
   }
 
   void _showAddressDialog(BuildContext context, AuthState auth) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.all(24),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Saved Delivery Address',
-                  style: GoogleFonts.poppins(fontSize: 17, fontWeight: FontWeight.bold),
-                ),
-                IconButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(Icons.home_outlined, color: AppColors.primary, size: 22),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          auth.fullName,
-                          style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Standard Delivery Address\n${auth.city}, Uttar Pradesh',
-                          style: GoogleFonts.lato(fontSize: 12, color: AppColors.textSecondary),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: AppColors.success.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      'DEFAULT',
-                      style: GoogleFonts.poppins(fontSize: 9, fontWeight: FontWeight.bold, color: AppColors.success),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                onPressed: () => Navigator.pop(ctx),
-                child: Text('Done', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    AddressesManagerSheet.show(context: context);
   }
 
   void _showAboutDialog(BuildContext context) {
@@ -1156,197 +1575,69 @@ class BuyerProfileScreen extends ConsumerWidget {
     );
   }
 
-  void _showBecomeSellerModal(BuildContext context, WidgetRef ref) {
-    final storeNameCtrl = TextEditingController();
-    final taglineCtrl = TextEditingController();
-    final phoneCtrl = TextEditingController();
-    final craftStoryCtrl = TextEditingController();
-    String categoryId = 'brass';
-    bool isSubmitting = false;
-
-    showModalBottomSheet(
+  void _confirmDeleteAccount(BuildContext context, WidgetRef ref) {
+    showDialog(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetCtx) => StatefulBuilder(
-        builder: (ctx, setModalState) => Container(
-          padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(ctx).viewInsets.bottom + 20),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Open Artisan Storefront 🏪',
-                      style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    IconButton(
-                      onPressed: () => Navigator.pop(sheetCtx),
-                      icon: const Icon(Icons.close),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Join Moradabad’s premier marketplace for authentic crafts.',
-                  style: GoogleFonts.lato(fontSize: 12, color: AppColors.textSecondary),
-                ),
-                const SizedBox(height: 16),
-
-                // Store Name
-                TextField(
-                  controller: storeNameCtrl,
-                  decoration: InputDecoration(
-                    labelText: 'Store Name (e.g. Royal Brass Creations)',
-                    labelStyle: GoogleFonts.lato(fontSize: 12),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    prefixIcon: const Icon(Icons.storefront_outlined, size: 20),
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Tagline
-                TextField(
-                  controller: taglineCtrl,
-                  decoration: InputDecoration(
-                    labelText: 'Tagline (e.g. Pure Handcrafted Brassware)',
-                    labelStyle: GoogleFonts.lato(fontSize: 12),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    prefixIcon: const Icon(Icons.short_text_rounded, size: 20),
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Category dropdown
-                DropdownButtonFormField<String>(
-                  initialValue: categoryId,
-                  decoration: InputDecoration(
-                    labelText: 'Primary Craft Category',
-                    labelStyle: GoogleFonts.lato(fontSize: 12),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    prefixIcon: const Icon(Icons.category_outlined, size: 20),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'brass', child: Text('Brassware & Peetal Mandi')),
-                    DropdownMenuItem(value: 'bridal', child: Text('Bridal Wear & Zardozi')),
-                    DropdownMenuItem(value: 'jewelry', child: Text('Kundan & Traditional Jewelry')),
-                    DropdownMenuItem(value: 'decor', child: Text('Home Decor & Artifacts')),
-                  ],
-                  onChanged: (val) {
-                    if (val != null) setModalState(() => categoryId = val);
-                  },
-                ),
-                const SizedBox(height: 12),
-
-                // Phone Number
-                TextField(
-                  controller: phoneCtrl,
-                  keyboardType: TextInputType.phone,
-                  decoration: InputDecoration(
-                    labelText: 'Business WhatsApp / Contact Number',
-                    labelStyle: GoogleFonts.lato(fontSize: 12),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    prefixIcon: const Icon(Icons.phone_outlined, size: 20),
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Craft Story
-                TextField(
-                  controller: craftStoryCtrl,
-                  maxLines: 2,
-                  decoration: InputDecoration(
-                    labelText: 'Artisan Story / Background',
-                    labelStyle: GoogleFonts.lato(fontSize: 12),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    prefixIcon: const Icon(Icons.edit_note_rounded, size: 20),
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // Submit Button
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    ),
-                    onPressed: isSubmitting
-                        ? null
-                        : () async {
-                            if (storeNameCtrl.text.trim().isEmpty) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Please enter a store name')),
-                              );
-                              return;
-                            }
-                            setModalState(() => isSubmitting = true);
-                            try {
-                              await ref.read(authProvider.notifier).becomeSeller(
-                                    storeName: storeNameCtrl.text.trim(),
-                                    tagline: taglineCtrl.text.trim().isNotEmpty
-                                        ? taglineCtrl.text.trim()
-                                        : 'Handcrafted in Moradabad',
-                                    bio: craftStoryCtrl.text.trim().isNotEmpty
-                                        ? craftStoryCtrl.text.trim()
-                                        : 'Local Moradabad Artisan',
-                                    location: 'Moradabad, UP',
-                                    categoryId: categoryId,
-                                    phoneNumber: phoneCtrl.text.trim().isNotEmpty
-                                        ? phoneCtrl.text.trim()
-                                        : '+919876543210',
-                                    craftStory: craftStoryCtrl.text.trim(),
-                                  );
-
-                              if (sheetCtx.mounted) Navigator.pop(sheetCtx);
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Artisan storefront created! Switching to Seller Mode...'),
-                                    backgroundColor: AppColors.success,
-                                  ),
-                                );
-                                ref.read(isSellerModeProvider.notifier).state = true;
-                              }
-                            } catch (e) {
-                              setModalState(() => isSubmitting = false);
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Failed to create store: $e'),
-                                    backgroundColor: AppColors.error,
-                                  ),
-                                );
-                              }
-                            }
-                          },
-                    child: isSubmitting
-                        ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                          )
-                        : Text(
-                            'Launch My Storefront ✨',
-                            style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold),
-                          ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 24),
+            const SizedBox(width: 8),
+            Text('Delete Account?', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 17, color: AppColors.error)),
+          ],
         ),
+        content: Text(
+          'This action is permanent.\n\nAll your personal data, saved delivery addresses, wishlist items, and account settings will be erased immediately in compliance with data privacy policies.\n\nAre you sure you wish to delete your account?',
+          style: GoogleFonts.plusJakartaSans(fontSize: 12.5, height: 1.45, color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: GoogleFonts.poppins(color: AppColors.textLight)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              elevation: 0,
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                await ref.read(authProvider.notifier).deleteAccount();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Your account and personal data have been permanently deleted.'),
+                      backgroundColor: Colors.black87,
+                    ),
+                  );
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                    (_) => false,
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to delete account: $e')),
+                  );
+                }
+              }
+            },
+            child: Text('Delete Permanently', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
+    );
+  }
+
+  void _showBecomeSellerModal(BuildContext context, WidgetRef ref) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const CreateStoreScreen()),
     );
   }
 }

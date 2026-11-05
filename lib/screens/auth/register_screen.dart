@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/google_sign_in_button.dart';
+import '../../widgets/sheesh_app_bar.dart';
 import '../buyer/buyer_main_screen.dart';
 import '../seller/seller_main_screen.dart';
+import '../legal/privacy_policy_screen.dart';
 import 'otp_screen.dart';
 import 'login_screen.dart';
 
@@ -131,10 +134,15 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
+              // Brand Icon & Header
+              const HeaderLogoBadge(size: 46)
+                  .animate()
+                  .fadeIn(duration: 400.ms)
+                  .scale(begin: const Offset(0.9, 0.9)),
+              const SizedBox(height: 16),
               Text(
                 'Join Sheesh 🌸',
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.playfairDisplay(
                   fontSize: 28,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textDark,
@@ -225,7 +233,18 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                               style: const TextStyle(
                                 color: AppColors.primary,
                                 fontWeight: FontWeight.w600,
+                                decoration: TextDecoration.underline,
                               ),
+                              recognizer: TapGestureRecognizer()
+                                ..onTap = () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => const PrivacyPolicyScreen(
+                                        initialTab: LegalDocTab.terms,
+                                      ),
+                                    ),
+                                  );
+                                },
                             ),
                             const TextSpan(text: ' and '),
                             TextSpan(
@@ -233,7 +252,18 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                               style: const TextStyle(
                                 color: AppColors.primary,
                                 fontWeight: FontWeight.w600,
+                                decoration: TextDecoration.underline,
                               ),
+                              recognizer: TapGestureRecognizer()
+                                ..onTap = () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => const PrivacyPolicyScreen(
+                                        initialTab: LegalDocTab.privacy,
+                                      ),
+                                    ),
+                                  );
+                                },
                             ),
                           ],
                         ),

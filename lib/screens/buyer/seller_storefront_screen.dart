@@ -8,6 +8,8 @@ import '../../providers/products_provider.dart';
 import '../../widgets/network_image_fallback.dart';
 import '../../widgets/product_card.dart';
 import '../../utils/whatsapp_helper.dart';
+import '../../utils/share_helper.dart';
+import '../../services/api_service.dart';
 
 class SellerStorefrontScreen extends ConsumerStatefulWidget {
   final String sellerId;
@@ -25,6 +27,9 @@ class _SellerStorefrontScreenState extends ConsumerState<SellerStorefrontScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    if (widget.sellerId.isNotEmpty && !widget.sellerId.startsWith('seller_current')) {
+      apiService.post('/sellers/${widget.sellerId}/view').catchError((_) {});
+    }
   }
 
   @override
@@ -77,14 +82,7 @@ class _SellerStorefrontScreenState extends ConsumerState<SellerStorefrontScreen>
               actions: [
                 IconButton(
                   icon: const Icon(Icons.share_rounded, color: Colors.white),
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Store link copied: sheesh.in/@${seller.storeName.toLowerCase().replaceAll(' ', '')}'),
-                        backgroundColor: AppColors.primaryDark,
-                      ),
-                    );
-                  },
+                  onPressed: () => ShareHelper.shareStore(context, seller),
                 ),
               ],
               flexibleSpace: FlexibleSpaceBar(
@@ -310,64 +308,128 @@ class _SellerStorefrontScreenState extends ConsumerState<SellerStorefrontScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'About the Creator',
-                    style: GoogleFonts.poppins(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
+                  if (seller.bio.trim().isNotEmpty) ...[
+                    Text(
+                      'About the Creator',
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    seller.bio,
-                    style: GoogleFonts.lato(
-                      fontSize: 14,
-                      color: AppColors.textSecondary,
-                      height: 1.5,
+                    const SizedBox(height: 8),
+                    Text(
+                      seller.bio,
+                      style: GoogleFonts.lato(
+                        fontSize: 14,
+                        color: AppColors.textSecondary,
+                        height: 1.5,
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 20),
+                  ],
 
-                  const SizedBox(height: 20),
-
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFF9F4),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: AppColors.gold.withValues(alpha: 0.4)),
+                  if (seller.craftStory.trim().isNotEmpty) ...[
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF9F4),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: AppColors.gold.withValues(alpha: 0.4)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Text('✨', style: TextStyle(fontSize: 18)),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Artisan Heritage & Craft Story',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.goldDark,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            seller.craftStory,
+                            style: GoogleFonts.lato(
+                              fontSize: 13,
+                              color: AppColors.textPrimary,
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            const Text('✨', style: TextStyle(fontSize: 18)),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Moradabad Craft Tradition',
-                              style: GoogleFonts.poppins(
-                                fontSize: 14,
+                    const SizedBox(height: 20),
+                  ],
+
+                  if (seller.upiId != null && seller.upiId!.isNotEmpty) ...[
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFAF3EC),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFF2A7B54).withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2A7B54).withValues(alpha: 0.12),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.qr_code_2_rounded, color: Color(0xFF2A7B54), size: 20),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Accepts Direct UPI Payments',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                                Text(
+                                  'UPI ID: ${seller.upiId}',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 11.5,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2A7B54).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '0% FEE',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 10,
                                 fontWeight: FontWeight.bold,
-                                color: AppColors.goldDark,
+                                color: const Color(0xFF2A7B54),
                               ),
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          seller.craftStory,
-                          style: GoogleFonts.lato(
-                            fontSize: 13,
-                            color: AppColors.textPrimary,
-                            height: 1.4,
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-
-                  const SizedBox(height: 20),
+                    const SizedBox(height: 16),
+                  ],
 
                   // Store verification badge
                   Row(
