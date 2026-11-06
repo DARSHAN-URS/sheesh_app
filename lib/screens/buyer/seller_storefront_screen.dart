@@ -5,11 +5,13 @@ import '../../theme/app_theme.dart';
 import '../../models/seller.dart';
 import '../../models/product.dart';
 import '../../providers/products_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../widgets/network_image_fallback.dart';
 import '../../widgets/product_card.dart';
 import '../../utils/whatsapp_helper.dart';
 import '../../utils/share_helper.dart';
 import '../../services/api_service.dart';
+import '../../services/supabase_service.dart';
 import 'store_map_screen.dart';
 
 class SellerStorefrontScreen extends ConsumerStatefulWidget {
@@ -30,6 +32,7 @@ class _SellerStorefrontScreenState extends ConsumerState<SellerStorefrontScreen>
     _tabController = TabController(length: 2, vsync: this);
     if (widget.sellerId.isNotEmpty && !widget.sellerId.startsWith('seller_current')) {
       apiService.post('/sellers/${widget.sellerId}/view').catchError((_) {});
+      SupabaseService.client.rpc('increment_seller_views', params: {'p_seller_id': widget.sellerId}).catchError((_) {});
     }
   }
 
@@ -37,6 +40,86 @@ class _SellerStorefrontScreenState extends ConsumerState<SellerStorefrontScreen>
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  Future<void> _contactArtisanViaWhatsApp(BuildContext context, Seller seller) async {
+    String phone = seller.phoneNumber.trim();
+    final auth = ref.read(authProvider);
+
+    // If currently logged-in user is viewing their own store, use their active phone
+    if (phone.isEmpty && auth.sellerProfile != null &&
+        (auth.sellerProfile!.id == seller.id || auth.sellerProfile!.userId == seller.userId)) {
+      phone = auth.sellerProfile!.phoneNumber.isNotEmpty
+          ? auth.sellerProfile!.phoneNumber
+          : (auth.supabaseUser?.phone ?? '');
+    }
+
+    // Direct database lookup if phone_number was not populated in memory
+    if (phone.isEmpty && seller.id.isNotEmpty) {
+      try {
+        final res = await SupabaseService.client
+            .from('sellers')
+            .select('phone_number, users(phone)')
+            .eq('id', seller.id)
+            .maybeSingle();
+        if (res != null) {
+          final sPhone = res['phone_number'] as String?;
+          final uPhone = (res['users'] as Map?)?['phone'] as String?;
+          if (sPhone != null && sPhone.isNotEmpty) {
+            phone = sPhone;
+          } else if (uPhone != null && uPhone.isNotEmpty) {
+            phone = uPhone;
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (context.mounted) {
+      await WhatsAppHelper.openArtisanChat(
+        context: context,
+        phoneNumber: phone,
+        artisanName: seller.storeName.isNotEmpty ? seller.storeName : seller.name,
+      );
+    }
+  }
+
+  Future<void> _callArtisan(BuildContext context, Seller seller) async {
+    String phone = seller.phoneNumber.trim();
+    final auth = ref.read(authProvider);
+
+    if (phone.isEmpty && auth.sellerProfile != null &&
+        (auth.sellerProfile!.id == seller.id || auth.sellerProfile!.userId == seller.userId)) {
+      phone = auth.sellerProfile!.phoneNumber.isNotEmpty
+          ? auth.sellerProfile!.phoneNumber
+          : (auth.supabaseUser?.phone ?? '');
+    }
+
+    if (phone.isEmpty && seller.id.isNotEmpty) {
+      try {
+        final res = await SupabaseService.client
+            .from('sellers')
+            .select('phone_number, users(phone)')
+            .eq('id', seller.id)
+            .maybeSingle();
+        if (res != null) {
+          final sPhone = res['phone_number'] as String?;
+          final uPhone = (res['users'] as Map?)?['phone'] as String?;
+          if (sPhone != null && sPhone.isNotEmpty) {
+            phone = sPhone;
+          } else if (uPhone != null && uPhone.isNotEmpty) {
+            phone = uPhone;
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (context.mounted) {
+      await WhatsAppHelper.makeArtisanCall(
+        context: context,
+        phoneNumber: phone,
+        artisanName: seller.storeName.isNotEmpty ? seller.storeName : seller.name,
+      );
+    }
   }
 
   @override
@@ -229,12 +312,7 @@ class _SellerStorefrontScreenState extends ConsumerState<SellerStorefrontScreen>
                               'WhatsApp Artisan',
                               style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold),
                             ),
-                            onPressed: () {
-                              WhatsAppHelper.openArtisanChat(
-                                phoneNumber: seller.phoneNumber,
-                                artisanName: seller.name,
-                              );
-                            },
+                            onPressed: () => _contactArtisanViaWhatsApp(context, seller),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -249,14 +327,7 @@ class _SellerStorefrontScreenState extends ConsumerState<SellerStorefrontScreen>
                             'Call',
                             style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary),
                           ),
-                          onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Calling ${seller.name} at ${seller.phoneNumber}...'),
-                                backgroundColor: AppColors.primaryDark,
-                              ),
-                            );
-                          },
+                          onPressed: () => _callArtisan(context, seller),
                         ),
                         const SizedBox(width: 8),
                         OutlinedButton.icon(

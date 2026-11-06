@@ -42,6 +42,11 @@ class OrdersNotifier extends StateNotifier<AsyncValue<List<OrderModel>>> {
           }
         }
       } catch (_) {}
+      final errStr = e.toString().toLowerCase();
+      if (errStr.contains('401') || errStr.contains('expired') || errStr.contains('token')) {
+        state = const AsyncValue.data([]);
+        return;
+      }
       state = AsyncValue.error(e, st);
     }
   }
@@ -193,6 +198,11 @@ class SellerOrdersNotifier extends StateNotifier<AsyncValue<List<OrderModel>>> {
           }
         }
       } catch (_) {}
+      final errStr = e.toString().toLowerCase();
+      if (errStr.contains('401') || errStr.contains('expired') || errStr.contains('token')) {
+        state = const AsyncValue.data([]);
+        return;
+      }
       state = AsyncValue.error(e, st);
     }
   }

@@ -207,7 +207,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         clearError: true,
       );
     } catch (e) {
-      if (e.toString().contains('401') || e.toString().contains('expired')) {
+      final errStr = e.toString().toLowerCase();
+      if (errStr.contains('401') || errStr.contains('expired') || errStr.contains('token')) {
         try {
           await SupabaseService.signOut();
         } catch (_) {}
@@ -255,11 +256,26 @@ class AuthNotifier extends StateNotifier<AuthState> {
         );
         return;
       } catch (_) {}
+      // Graceful local offline fallback: use Supabase user metadata
       state = state.copyWith(
         supabaseUser: user,
+        profile: <String, dynamic>{
+          'id': user.id,
+          'email': user.email,
+          'full_name': user.userMetadata?['full_name'] ?? 'User',
+        },
         isLoading: false,
-        error: e.toString(),
+        clearError: true,
       );
+    }
+  }
+
+  // ─── Profile Refresh ───────────────────────────────────────────────────────
+
+  Future<void> refreshProfile() async {
+    final user = SupabaseService.currentUser ?? state.supabaseUser;
+    if (user != null) {
+      await _loadProfile(user);
     }
   }
 
@@ -561,6 +577,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     String? upiId,
     String? gstNumber,
     String? panNumber,
+    String? phoneNumber,
   }) async {
     state = state.copyWith(isLoading: true, clearError: true);
     final cur = state.sellerProfile;
@@ -604,7 +621,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       isFeatured: cur?.isFeatured ?? false,
       memberSince: cur?.memberSince ?? '2025',
       responseTime: cur?.responseTime ?? 'Within 2 hours',
-      phoneNumber: cur?.phoneNumber ?? '+919548269940',
+      phoneNumber: phoneNumber ?? (cur?.phoneNumber.isNotEmpty == true ? cur!.phoneNumber : null) ?? (state.profile?['phone'] as String?) ?? state.supabaseUser?.phone ?? '',
       craftStory: craftStory ?? cur?.craftStory ?? 'Traditional Moradabad crafts.',
       upiId: upiId ?? cur?.upiId,
       gstNumber: gstNumber ?? cur?.gstNumber,
@@ -619,6 +636,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     if (bio != null && bio.isNotEmpty) body['bio'] = bio;
     if (location != null && location.isNotEmpty) body['location'] = location;
     if (craftStory != null && craftStory.isNotEmpty) body['craft_story'] = craftStory;
+    if (phoneNumber != null && phoneNumber.isNotEmpty) body['phone_number'] = phoneNumber;
     if (avatarUrl != null) body['avatar_url'] = avatarUrl;
     if (coverUrl != null) body['cover_url'] = coverUrl;
     if (upiId != null) body['upi_id'] = upiId;

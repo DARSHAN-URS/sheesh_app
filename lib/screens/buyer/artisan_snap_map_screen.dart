@@ -211,10 +211,12 @@ class _ArtisanSnapMapScreenState extends ConsumerState<ArtisanSnapMapScreen> wit
 
   @override
   Widget build(BuildContext context) {
-    return const StoreMapScreen();
+    final firstSellerId = widget.initialStores.isNotEmpty ? widget.initialStores.first.seller.id : null;
+    return StoreMapScreen(highlightSellerId: firstSellerId);
   }
 
   Widget _buildLegacyMap(BuildContext context) {
+    final auth = ref.watch(authProvider);
     final userAvatar = auth.avatarUrl;
     final userName = auth.fullName.isNotEmpty ? auth.fullName : 'You';
 

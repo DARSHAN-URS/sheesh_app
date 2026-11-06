@@ -78,10 +78,6 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           if (_phoneController.text.isEmpty && phone.isNotEmpty) {
             _phoneController.text = phone;
           }
-          final city = auth.profile?['city'] as String? ?? '';
-          if (_addressController.text.isEmpty && city.isNotEmpty) {
-            _addressController.text = city;
-          }
         }
       }
     });
@@ -189,6 +185,17 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
   Future<void> _placeOrder() async {
     if (!_formKey.currentState!.validate()) return;
+
+    final auth = ref.read(authProvider);
+    final cartItems = ref.read(cartProvider).value ?? [];
+    final ownItems = cartItems.where((item) =>
+        auth.sellerProfile != null &&
+        (item.product.sellerId == auth.sellerProfile!.id ||
+         item.product.sellerId == auth.sellerProfile!.userId)).toList();
+    if (ownItems.isNotEmpty) {
+      _showError('You cannot purchase your own product ("${ownItems.first.product.name}"). Store owners cannot buy their own creations.');
+      return;
+    }
 
     setState(() => _isProcessing = true);
 

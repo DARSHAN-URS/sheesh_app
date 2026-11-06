@@ -6,6 +6,7 @@ import '../../models/product.dart';
 import '../../models/seller.dart';
 import '../../providers/products_provider.dart';
 import '../../providers/cart_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/reviews_provider.dart';
 import '../../widgets/network_image_fallback.dart';
 import '../../widgets/gradient_button.dart';
@@ -48,6 +49,11 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
 
     final Seller? seller = ref.watch(sellerDetailProvider(product.sellerId)).value;
     final isFav = ref.watch(wishlistProvider).contains(product.id);
+    final auth = ref.watch(authProvider);
+    final bool isOwner = (auth.sellerProfile != null &&
+        (auth.sellerProfile!.id == product.sellerId ||
+         auth.sellerProfile!.userId == product.sellerId)) ||
+        (auth.supabaseUser != null && auth.supabaseUser!.id == product.sellerId);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -522,9 +528,13 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                               ),
                             ),
                             onPressed: () {
+                              final effectivePhone = seller.phoneNumber.isNotEmpty
+                                  ? seller.phoneNumber
+                                  : product.sellerPhone;
                               WhatsAppHelper.openArtisanChat(
-                                phoneNumber: seller.phoneNumber,
-                                artisanName: seller.name,
+                                context: context,
+                                phoneNumber: effectivePhone,
+                                artisanName: seller.storeName.isNotEmpty ? seller.storeName : seller.name,
                                 productName: product.name,
                                 productPrice: product.price,
                               );
@@ -920,73 +930,140 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                   top: BorderSide(color: AppColors.border),
                 ),
               ),
-              child: Row(
-                children: [
-                  // Add to Cart button
-                  Expanded(
-                    flex: 1,
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        side: const BorderSide(color: AppColors.primary, width: 1.5),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: isOwner
+                  ? Container(
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFFDF8),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: AppColors.gold.withValues(alpha: 0.6)),
                       ),
-                      onPressed: () {
-                        ref.read(cartProvider.notifier).addToCart(
-                          product.id,
-                          quantity: _quantity,
-                          selectedSize: product.categoryId == 'suits' ? _selectedSize : null,
-                        );
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Added $_quantity x ${product.name} to your cart! ✨'),
-                            backgroundColor: AppColors.primary,
-                            behavior: SnackBarBehavior.floating,
-                            action: SnackBarAction(
-                              label: 'VIEW CART',
-                              textColor: AppColors.goldLight,
-                              onPressed: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(builder: (_) => const CartScreen()),
-                                );
-                              },
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: AppColors.gold.withValues(alpha: 0.15),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.storefront_rounded, size: 20, color: AppColors.goldDark),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'This is your artisan piece ✨',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                                Text(
+                                  'Artisan owners cannot purchase their own creations.',
+                                  style: GoogleFonts.lato(
+                                    fontSize: 11,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        );
-                      },
-                      child: Text(
-                        'Add to Cart',
-                        style: GoogleFonts.poppins(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.primary,
-                        ),
+                        ],
                       ),
-                    ),
-                  ),
+                    )
+                  : Row(
+                      children: [
+                        // Add to Cart button
+                        Expanded(
+                          flex: 1,
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              side: const BorderSide(color: AppColors.primary, width: 1.5),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            onPressed: () async {
+                              try {
+                                await ref.read(cartProvider.notifier).addToCart(
+                                  product.id,
+                                  quantity: _quantity,
+                                  selectedSize: product.categoryId == 'suits' ? _selectedSize : null,
+                                );
+                                if (!context.mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Added $_quantity x ${product.name} to your cart! ✨'),
+                                    backgroundColor: AppColors.primary,
+                                    behavior: SnackBarBehavior.floating,
+                                    action: SnackBarAction(
+                                      label: 'VIEW CART',
+                                      textColor: AppColors.goldLight,
+                                      onPressed: () {
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute(builder: (_) => const CartScreen()),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                );
+                              } catch (e) {
+                                if (!context.mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(e.toString().replaceAll('ApiException: ', '').replaceAll('Exception: ', '')),
+                                    backgroundColor: AppColors.error,
+                                  ),
+                                );
+                              }
+                            },
+                            child: Text(
+                              'Add to Cart',
+                              style: GoogleFonts.poppins(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ),
+                        ),
 
-                  const SizedBox(width: 12),
+                        const SizedBox(width: 12),
 
-                  // Buy Now button
-                  Expanded(
-                    flex: 1,
-                    child: GradientButton(
-                      onPressed: () {
-                        ref.read(cartProvider.notifier).addToCart(
-                          product.id,
-                          quantity: _quantity,
-                          selectedSize: product.categoryId == 'suits' ? _selectedSize : null,
-                        );
-                        Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => const CheckoutScreen()),
-                        );
-                      },
-                      text: 'Buy Now ⚡',
-                      height: 48,
+                        // Buy Now button
+                        Expanded(
+                          flex: 1,
+                          child: GradientButton(
+                            onPressed: () async {
+                              try {
+                                await ref.read(cartProvider.notifier).addToCart(
+                                  product.id,
+                                  quantity: _quantity,
+                                  selectedSize: product.categoryId == 'suits' ? _selectedSize : null,
+                                );
+                                if (!context.mounted) return;
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(builder: (_) => const CheckoutScreen()),
+                                );
+                              } catch (e) {
+                                if (!context.mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(e.toString().replaceAll('ApiException: ', '').replaceAll('Exception: ', '')),
+                                    backgroundColor: AppColors.error,
+                                  ),
+                                );
+                              }
+                            },
+                            text: 'Buy Now ⚡',
+                            height: 48,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
-              ),
             ),
           ),
         ],

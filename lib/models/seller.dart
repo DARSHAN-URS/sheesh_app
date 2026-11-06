@@ -92,7 +92,12 @@ class Seller {
       isFeatured: json['is_featured'] as bool? ?? false,
       memberSince: json['member_since'] as String? ?? '',
       responseTime: json['response_time'] as String? ?? 'Within 2 hours',
-      phoneNumber: json['phone_number'] as String? ?? '',
+      phoneNumber: (json['phone_number'] as String?)?.isNotEmpty == true
+          ? (json['phone_number'] as String)
+          : (user?['phone'] as String?) ??
+            (json['phone'] as String?) ??
+            (user?['phone_number'] as String?) ??
+            '',
       craftStory: json['craft_story'] as String? ?? '',
       kycVerified: json['kyc_verified'] as bool? ?? false,
       upiId: json['upi_id'] as String? ?? json['upi'] as String?,

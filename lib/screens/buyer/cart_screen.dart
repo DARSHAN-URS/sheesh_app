@@ -6,6 +6,7 @@ import '../../theme/app_theme.dart';
 import '../../models/product.dart';
 import '../../providers/cart_provider.dart';
 import '../../providers/products_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../widgets/network_image_fallback.dart';
 import '../../widgets/gradient_button.dart';
 import 'checkout_screen.dart';
@@ -81,6 +82,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     final selectedTab = ref.watch(cartSubTabProvider);
     final cartAsync = ref.watch(cartProvider);
     final cartNotifier = ref.read(cartProvider.notifier);
+    final auth = ref.watch(authProvider);
 
     final cart = cartAsync.value ?? [];
     final subtotal = cartNotifier.subtotal;
@@ -341,6 +343,24 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                   Expanded(
                     child: GradientButton(
                       onPressed: () {
+                        final auth = ref.read(authProvider);
+                        final ownItems = cart.where((item) =>
+                            auth.sellerProfile != null &&
+                            (item.product.sellerId == auth.sellerProfile!.id ||
+                             item.product.sellerId == auth.sellerProfile!.userId)).toList();
+                        if (ownItems.isNotEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Your bag contains your own creation ("${ownItems.first.product.name}"). Store owners cannot purchase their own products. Please remove it to proceed.',
+                                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
+                              ),
+                              backgroundColor: AppColors.error,
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                          return;
+                        }
                         Navigator.of(context).push(
                           MaterialPageRoute(builder: (_) => const CheckoutScreen()),
                         );
@@ -369,6 +389,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     double total,
     List<Product> favProducts,
   ) {
+    final auth = ref.watch(authProvider);
     return cartAsync.when(
       loading: () => const Center(child: CircularProgressIndicator(color: AppColors.primary)),
       error: (err, _) => Center(
@@ -517,6 +538,26 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                                     color: AppColors.textSecondary,
                                   ),
                                 ),
+                                if (auth.sellerProfile != null &&
+                                    (p.sellerId == auth.sellerProfile!.id || p.sellerId == auth.sellerProfile!.userId)) ...[
+                                  const SizedBox(height: 4),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.error.withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(5),
+                                      border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+                                    ),
+                                    child: Text(
+                                      '⚠️ Your creation • Remove to checkout',
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.error,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                                 if (item.selectedSize != null) ...[
                                   const SizedBox(height: 4),
                                   Container(

@@ -43,26 +43,69 @@ void main() async {
   );
 
   ErrorWidget.builder = (FlutterErrorDetails details) {
+    final errStr = details.exceptionAsString().toLowerCase();
+    final isAuthError = errStr.contains('expired') ||
+        errStr.contains('token') ||
+        errStr.contains('401') ||
+        errStr.contains('unauthorized');
+
+    if (isAuthError) {
+      // Clean up stale session credentials
+      Supabase.instance.client.auth.signOut().catchError((_) {});
+    }
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: Center(
           child: Padding(
-            padding: const EdgeInsets.all(24.0),
+            padding: const EdgeInsets.symmetric(horizontal: 28.0, vertical: 24.0),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.info_outline_rounded, color: AppColors.primary, size: 48),
-                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: (isAuthError ? const Color(0xFFC89B3C) : AppColors.primary).withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    isAuthError ? Icons.lock_clock_rounded : Icons.info_outline_rounded,
+                    color: isAuthError ? const Color(0xFF8A6516) : AppColors.primary,
+                    size: 46,
+                  ),
+                ),
+                const SizedBox(height: 18),
                 Text(
-                  'Screen Rendering Notice',
-                  style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold),
+                  isAuthError ? 'Session Expired' : 'Screen Notice',
+                  style: GoogleFonts.playfairDisplay(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  details.exceptionAsString(),
+                  isAuthError
+                      ? 'Your artisan session has timed out. Please sign in again to sync your orders and store.'
+                      : 'A temporary display glitch occurred. Tap below to refresh your view.',
                   textAlign: TextAlign.center,
-                  style: GoogleFonts.lato(fontSize: 12, color: AppColors.textSecondary),
+                  style: GoogleFonts.plusJakartaSans(fontSize: 13, height: 1.45, color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton.icon(
+                  icon: Icon(isAuthError ? Icons.login_rounded : Icons.refresh_rounded, size: 18),
+                  label: Text(
+                    isAuthError ? 'Sign In Again' : 'Reload Screen',
+                    style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 13),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    elevation: 0,
+                  ),
+                  onPressed: () {
+                    // Navigate cleanly to SplashScreen to reload state
+                    runApp(const ProviderScope(child: SheeshApp()));
+                  },
                 ),
               ],
             ),

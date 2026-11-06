@@ -372,6 +372,7 @@ class _CreateStoreScreenState extends ConsumerState<CreateStoreScreen> {
               craftStory: _bioCtrl.text.trim(),
               avatarUrl: _avatarUrl,
               coverUrl: _coverUrl,
+              phoneNumber: formattedPhone,
               upiId: upiId.isNotEmpty ? upiId : null,
               gstNumber: gstNumber.isNotEmpty ? gstNumber : null,
               panNumber: panNumber.isNotEmpty ? panNumber : null,

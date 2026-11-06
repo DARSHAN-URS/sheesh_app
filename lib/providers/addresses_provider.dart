@@ -89,6 +89,34 @@ class AddressesNotifier extends StateNotifier<AsyncValue<List<SavedAddress>>> {
       await fetch();
       return newAddr;
     } catch (e) {
+      // Direct Supabase fallback
+      try {
+        final userId = SupabaseService.currentUser?.id;
+        if (userId != null) {
+          final insertPayload = <String, dynamic>{
+            'user_id': userId,
+            'label': label,
+            'name': name.trim(),
+            'phone': phone.trim(),
+            'street': street.trim(),
+            if (landmark != null && landmark.trim().isNotEmpty) 'landmark': landmark.trim(),
+            'city': city.trim(),
+            'state': stateName.trim(),
+            'postal_code': postalCode.trim(),
+            'is_default': isDefault || currentList.isEmpty,
+          };
+          if (isDefault || currentList.isEmpty) {
+            await SupabaseService.client.from('addresses').update({'is_default': false}).eq('user_id', userId).catchError((_) {});
+          }
+          final sbRes = await SupabaseService.client.from('addresses').insert(insertPayload).select().single();
+          if (sbRes is Map<String, dynamic>) {
+            final addr = SavedAddress.fromJson(sbRes);
+            await fetch();
+            return addr;
+          }
+        }
+      } catch (_) {}
+
       // Local optimistic fallback if server error
       final fallbackAddr = SavedAddress(
         id: 'addr-${DateTime.now().millisecondsSinceEpoch}',
@@ -137,6 +165,33 @@ class AddressesNotifier extends StateNotifier<AsyncValue<List<SavedAddress>>> {
       await fetch();
       return updatedAddr;
     } catch (e) {
+      // Direct Supabase fallback
+      try {
+        final userId = SupabaseService.currentUser?.id;
+        if (userId != null) {
+          if (isDefault) {
+            await SupabaseService.client.from('addresses').update({'is_default': false}).eq('user_id', userId).catchError((_) {});
+          }
+          final updatePayload = <String, dynamic>{
+            'label': label,
+            'name': name.trim(),
+            'phone': phone.trim(),
+            'street': street.trim(),
+            'landmark': landmark?.trim(),
+            'city': city.trim(),
+            'state': stateName.trim(),
+            'postal_code': postalCode.trim(),
+            'is_default': isDefault,
+          };
+          final sbRes = await SupabaseService.client.from('addresses').update(updatePayload).eq('id', id).eq('user_id', userId).select().single();
+          if (sbRes is Map<String, dynamic>) {
+            final addr = SavedAddress.fromJson(sbRes);
+            await fetch();
+            return addr;
+          }
+        }
+      } catch (_) {}
+
       final currentList = state.valueOrNull ?? [];
       final updatedList = currentList.map((a) {
         if (a.id == id) {

@@ -518,16 +518,15 @@ class AddressesManagerSheet extends ConsumerWidget {
   }
 
   void _openAddressForm(BuildContext context, WidgetRef ref, {SavedAddress? addressToEdit}) {
-    final auth = ref.read(authProvider);
     final isEditing = addressToEdit != null;
 
-    final nameCtrl = TextEditingController(text: isEditing ? addressToEdit.name : auth.fullName);
-    final phoneCtrl = TextEditingController(text: isEditing ? addressToEdit.phone : (auth.profile?['phone'] ?? ''));
+    final nameCtrl = TextEditingController(text: isEditing ? addressToEdit.name : '');
+    final phoneCtrl = TextEditingController(text: isEditing ? addressToEdit.phone : '');
     final streetCtrl = TextEditingController(text: isEditing ? addressToEdit.street : '');
     final landmarkCtrl = TextEditingController(text: isEditing ? (addressToEdit.landmark ?? '') : '');
-    final cityCtrl = TextEditingController(text: isEditing ? addressToEdit.city : 'Moradabad');
-    final stateCtrl = TextEditingController(text: isEditing ? addressToEdit.state : 'Uttar Pradesh');
-    final pinCtrl = TextEditingController(text: isEditing ? addressToEdit.postalCode : '244001');
+    final cityCtrl = TextEditingController(text: isEditing ? addressToEdit.city : '');
+    final stateCtrl = TextEditingController(text: isEditing ? addressToEdit.state : '');
+    final pinCtrl = TextEditingController(text: isEditing ? addressToEdit.postalCode : '');
 
     String selectedLabel = isEditing ? addressToEdit.label : 'Home';
     bool makeDefault = isEditing ? addressToEdit.isDefault : false;
@@ -576,7 +575,7 @@ class AddressesManagerSheet extends ConsumerWidget {
                   ],
                 ),
                 Text(
-                  'All fields with * are required for express Moradabad delivery',
+                  'All fields marked with * are required for delivery',
                   style: GoogleFonts.plusJakartaSans(fontSize: 11.5, color: AppColors.textSecondary),
                 ),
                 const SizedBox(height: 14),
@@ -650,17 +649,12 @@ class AddressesManagerSheet extends ConsumerWidget {
                         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                         decoration: InputDecoration(
                           labelText: 'PIN Code *',
-                          hintText: '244001',
+                          hintText: 'e.g. 244001',
                           counterText: '',
                           prefixIcon: const Icon(Icons.pin_drop_outlined, size: 20),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                           contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                         ),
-                        onChanged: (val) {
-                          if (val.trim() == '244001' && cityCtrl.text.isEmpty) {
-                            cityCtrl.text = 'Moradabad';
-                          }
-                        },
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -671,7 +665,7 @@ class AddressesManagerSheet extends ConsumerWidget {
                         textCapitalization: TextCapitalization.words,
                         decoration: InputDecoration(
                           labelText: 'City *',
-                          hintText: 'Moradabad',
+                          hintText: 'e.g. Moradabad',
                           prefixIcon: const Icon(Icons.location_city_outlined, size: 20),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                           contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -724,7 +718,7 @@ class AddressesManagerSheet extends ConsumerWidget {
                         textCapitalization: TextCapitalization.words,
                         decoration: InputDecoration(
                           labelText: 'State *',
-                          hintText: 'Uttar Pradesh',
+                          hintText: 'e.g. Uttar Pradesh',
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                           contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                         ),
@@ -792,6 +786,10 @@ class AddressesManagerSheet extends ConsumerWidget {
                               _showToast(context, 'Please enter city');
                               return;
                             }
+                            if (stateName.isEmpty) {
+                              _showToast(context, 'Please enter state');
+                              return;
+                            }
 
                             setModalState(() => isSaving = true);
                             try {
@@ -804,7 +802,7 @@ class AddressesManagerSheet extends ConsumerWidget {
                                       street: street,
                                       landmark: landmark.isNotEmpty ? landmark : null,
                                       city: city,
-                                      stateName: stateName.isNotEmpty ? stateName : 'Uttar Pradesh',
+                                      stateName: stateName,
                                       postalCode: pincode,
                                       isDefault: makeDefault,
                                     );
@@ -816,7 +814,7 @@ class AddressesManagerSheet extends ConsumerWidget {
                                       street: street,
                                       landmark: landmark.isNotEmpty ? landmark : null,
                                       city: city,
-                                      stateName: stateName.isNotEmpty ? stateName : 'Uttar Pradesh',
+                                      stateName: stateName,
                                       postalCode: pincode,
                                       isDefault: makeDefault,
                                     );

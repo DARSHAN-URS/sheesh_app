@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/product.dart';
 import '../providers/cart_provider.dart';
+import '../providers/auth_provider.dart';
 import '../theme/app_theme.dart';
 import '../screens/buyer/product_detail_screen.dart';
 import '../screens/buyer/cart_screen.dart';
@@ -22,6 +23,11 @@ class ProductCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final wishlist = ref.watch(wishlistProvider);
     final isFav = wishlist.contains(product.id);
+    final auth = ref.watch(authProvider);
+    final bool isOwner = (auth.sellerProfile != null &&
+        (auth.sellerProfile!.id == product.sellerId ||
+         auth.sellerProfile!.userId == product.sellerId)) ||
+        (auth.supabaseUser != null && auth.supabaseUser!.id == product.sellerId);
 
     return GestureDetector(
       onTap: () {
@@ -248,51 +254,79 @@ class ProductCard extends ConsumerWidget {
                         ],
                       ),
 
-                      // Add to Cart Button
-                      GestureDetector(
-                        onTap: () {
-                          ref.read(cartProvider.notifier).addToCart(product.id);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Added ${product.name} to cart! ✨'),
-                              duration: const Duration(seconds: 2),
-                              backgroundColor: AppColors.primary,
-                              behavior: SnackBarBehavior.floating,
-                              action: SnackBarAction(
-                                label: 'VIEW CART',
-                                textColor: AppColors.goldLight,
-                                onPressed: () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute(builder: (_) => const CartScreen()),
-                                  );
-                                },
+                      // Add to Cart Button or "Yours" badge
+                      isOwner
+                          ? Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: AppColors.gold.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: AppColors.goldDark.withValues(alpha: 0.3)),
                               ),
-                            ),
-                          );
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: AppColors.primary.withValues(alpha: 0.4)),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.add_rounded, size: 14, color: AppColors.primary),
-                              Text(
-                                'ADD',
+                              child: Text(
+                                'YOURS ✨',
                                 style: GoogleFonts.poppins(
-                                  fontSize: 11,
+                                  fontSize: 10,
                                   fontWeight: FontWeight.w700,
-                                  color: AppColors.primary,
+                                  color: AppColors.goldDark,
                                 ),
                               ),
-                            ],
-                          ),
-                        ),
-                      ),
+                            )
+                          : GestureDetector(
+                              onTap: () async {
+                                try {
+                                  await ref.read(cartProvider.notifier).addToCart(product.id);
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Added ${product.name} to cart! ✨'),
+                                      duration: const Duration(seconds: 2),
+                                      backgroundColor: AppColors.primary,
+                                      behavior: SnackBarBehavior.floating,
+                                      action: SnackBarAction(
+                                        label: 'VIEW CART',
+                                        textColor: AppColors.goldLight,
+                                        onPressed: () {
+                                          Navigator.of(context).push(
+                                            MaterialPageRoute(builder: (_) => const CartScreen()),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  );
+                                } catch (e) {
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(e.toString().replaceAll('ApiException: ', '').replaceAll('Exception: ', '')),
+                                      backgroundColor: AppColors.error,
+                                    ),
+                                  );
+                                }
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.4)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.add_rounded, size: 14, color: AppColors.primary),
+                                    Text(
+                                      'ADD',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
                     ],
                   ),
                 ],

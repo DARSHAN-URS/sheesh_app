@@ -12,6 +12,7 @@ class Product {
   final String sellerLocation;
   final bool sellerIsVerified;
   final String sellerUpiId;
+  final String sellerPhone;
   // Images (joined from product_images table)
   final List<String> imageUrls;
   final double rating;
@@ -39,6 +40,7 @@ class Product {
     this.sellerLocation = 'Moradabad, UP',
     this.sellerIsVerified = false,
     this.sellerUpiId = '',
+    this.sellerPhone = '',
     required this.imageUrls,
     this.rating = 4.8,
     this.reviewsCount = 0,
@@ -85,6 +87,10 @@ class Product {
       sellerLocation: seller?['location'] as String? ?? 'Moradabad, UP',
       sellerIsVerified: seller?['is_verified'] as bool? ?? false,
       sellerUpiId: seller?['upi_id'] as String? ?? '',
+      sellerPhone: (seller?['phone_number'] as String?)?.isNotEmpty == true
+          ? (seller?['phone_number'] as String)
+          : (seller?['phone'] as String?) ??
+            (seller?['users'] is Map ? (seller!['users']['phone'] as String?) ?? '' : ''),
       imageUrls: images,
       rating: (json['rating'] as num?)?.toDouble() ?? 4.8,
       reviewsCount: json['reviews_count'] as int? ?? 0,

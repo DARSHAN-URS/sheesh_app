@@ -61,6 +61,11 @@ class CartNotifier extends StateNotifier<AsyncValue<List<CartItem>>> {
       await apiService.post('/cart/add', data: data);
       await fetchCart(); // Refresh cart
     } catch (e) {
+      if (e.toString().toLowerCase().contains('own product') ||
+          e.toString().toLowerCase().contains('cannot add') ||
+          e.toString().toLowerCase().contains('cannot purchase')) {
+        rethrow;
+      }
       // Fallback: direct Supabase upsert
       try {
         final userId = SupabaseService.currentUser?.id;

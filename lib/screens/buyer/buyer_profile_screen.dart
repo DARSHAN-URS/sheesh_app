@@ -15,6 +15,7 @@ import '../auth/login_screen.dart';
 import '../../models/seller.dart';
 import '../seller/create_store_screen.dart';
 import '../seller/seller_onboarding_screen.dart';
+import '../seller/edit_store_profile_screen.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../widgets/network_image_fallback.dart';
 import '../../widgets/store_photo_picker_sheet.dart';
@@ -38,9 +39,15 @@ class BuyerProfileScreen extends ConsumerWidget {
     final cartItems = ref.watch(cartProvider).value ?? [];
     final addresses = ref.watch(addressesProvider).valueOrNull ?? [];
 
-    final userName = auth.fullName.isNotEmpty ? auth.fullName : 'Valued Shopper';
-    final userEmail = auth.supabaseUser?.email ?? 'Shopper Account';
-    final userPhone = auth.supabaseUser?.phone ?? auth.profile?['phone'] ?? '';
+    final userName = auth.isAuthenticated
+        ? (auth.fullName.isNotEmpty ? auth.fullName : 'Valued Shopper')
+        : 'Welcome to Sheesh';
+    final userEmail = auth.isAuthenticated
+        ? (auth.supabaseUser?.email ?? 'Shopper Account')
+        : 'Sign in to sync orders & saved artisan pieces';
+    final userPhone = auth.isAuthenticated
+        ? (auth.supabaseUser?.phone ?? auth.profile?['phone'] ?? '')
+        : '';
     final userCity = auth.city;
 
     return Scaffold(
@@ -233,24 +240,48 @@ class BuyerProfileScreen extends ConsumerWidget {
                   const Divider(height: 1, color: AppColors.border),
                   const SizedBox(height: 12),
 
-                  // Edit Profile Button
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.edit_rounded, size: 16),
-                      label: Text(
-                        'Edit Profile',
-                        style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600),
+                  // Edit Profile or Sign In Button
+                  if (auth.isAuthenticated)
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.edit_rounded, size: 16),
+                        label: Text(
+                          'Edit Profile',
+                          style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w600),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                          side: const BorderSide(color: AppColors.primary),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        onPressed: () => _showEditProfileSheet(context, ref, auth),
                       ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.primary,
-                        side: const BorderSide(color: AppColors.primary),
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    )
+                  else
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.login_rounded, size: 16),
+                        label: Text(
+                          'Sign In or Register 🚀',
+                          style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 11),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          elevation: 0,
+                        ),
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const LoginScreen()),
+                          );
+                        },
                       ),
-                      onPressed: () => _showEditProfileSheet(context, ref, auth),
                     ),
-                  ),
                   const SizedBox(height: 4),
 
                   // Quick Stats Row
@@ -631,71 +662,72 @@ class BuyerProfileScreen extends ConsumerWidget {
             const SizedBox(height: 20),
 
             // ─── Sign Out & Delete Account Section ─────────────────────────────
-            Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Material(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                clipBehavior: Clip.antiAlias,
-                child: Column(
-                  children: [
-                    ListTile(
-                      onTap: () => _confirmSignOut(context, ref),
-                      leading: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: AppColors.error.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(10),
+            if (auth.isAuthenticated)
+              Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Material(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  clipBehavior: Clip.antiAlias,
+                  child: Column(
+                    children: [
+                      ListTile(
+                        onTap: () => _confirmSignOut(context, ref),
+                        leading: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppColors.error.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.logout_rounded, color: AppColors.error, size: 20),
                         ),
-                        child: const Icon(Icons.logout_rounded, color: AppColors.error, size: 20),
-                      ),
-                      title: Text(
-                        'Sign Out',
-                        style: GoogleFonts.poppins(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.error,
+                        title: Text(
+                          'Sign Out',
+                          style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.error,
+                          ),
                         ),
-                      ),
-                      subtitle: Text(
-                        'Safely log out of your Sheesh account',
-                        style: GoogleFonts.lato(fontSize: 11, color: AppColors.textSecondary),
-                      ),
-                      trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.error),
-                    ),
-                    const Divider(height: 1, indent: 56, endIndent: 16, color: AppColors.border),
-                    ListTile(
-                      onTap: () => _confirmDeleteAccount(context, ref),
-                      leading: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(10),
+                        subtitle: Text(
+                          'Safely log out of your Sheesh account',
+                          style: GoogleFonts.lato(fontSize: 11, color: AppColors.textSecondary),
                         ),
-                        child: const Icon(Icons.delete_forever_rounded, color: Colors.black54, size: 20),
+                        trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.error),
                       ),
-                      title: Text(
-                        'Delete Account 🗑️',
-                        style: GoogleFonts.poppins(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black87,
+                      const Divider(height: 1, indent: 56, endIndent: 16, color: AppColors.border),
+                      ListTile(
+                        onTap: () => _confirmDeleteAccount(context, ref),
+                        leading: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.delete_forever_rounded, color: Colors.black54, size: 20),
                         ),
+                        title: Text(
+                          'Delete Account 🗑️',
+                          style: GoogleFonts.poppins(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        subtitle: Text(
+                          'Permanently erase your account and personal data',
+                          style: GoogleFonts.lato(fontSize: 10.5, color: AppColors.textSecondary),
+                        ),
+                        trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textLight),
                       ),
-                      subtitle: Text(
-                        'Permanently erase your account and personal data',
-                        style: GoogleFonts.lato(fontSize: 10.5, color: AppColors.textSecondary),
-                      ),
-                      trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textLight),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
 
             const SizedBox(height: 24),
 
@@ -1327,160 +1359,9 @@ class BuyerProfileScreen extends ConsumerWidget {
   }
 
   void _showEditStoreModal(BuildContext context, WidgetRef ref, Seller seller) {
-    final storeNameCtrl = TextEditingController(text: seller.storeName);
-    final avatarUrlCtrl = TextEditingController(text: seller.avatarUrl);
-    final taglineCtrl = TextEditingController(text: seller.tagline);
-    final locationCtrl = TextEditingController(text: seller.location);
-    final craftStoryCtrl = TextEditingController(text: seller.craftStory.isNotEmpty ? seller.craftStory : seller.bio);
-    bool isSaving = false;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(
-        builder: (modalCtx, setModalState) => Container(
-          padding: EdgeInsets.only(
-            top: 24,
-            left: 20,
-            right: 20,
-            bottom: MediaQuery.of(modalCtx).viewInsets.bottom + 24,
-          ),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppColors.border,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Edit Store Profile 🏪',
-                  style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  'Custom branding for your artisan shop (independent from buyer profile)',
-                  style: GoogleFonts.lato(fontSize: 12, color: AppColors.textSecondary),
-                ),
-                const SizedBox(height: 20),
-                TextField(
-                  controller: storeNameCtrl,
-                  decoration: InputDecoration(
-                    labelText: 'Store / Brand Name',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    prefixIcon: const Icon(Icons.storefront_outlined),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: avatarUrlCtrl,
-                  decoration: InputDecoration(
-                    labelText: 'Store Logo / Avatar Image URL',
-                    hintText: 'https://example.com/store-logo.jpg',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    prefixIcon: const Icon(Icons.image_outlined),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: taglineCtrl,
-                  decoration: InputDecoration(
-                    labelText: 'Tagline / Motto',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    prefixIcon: const Icon(Icons.flag_outlined),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: locationCtrl,
-                  decoration: InputDecoration(
-                    labelText: 'Workshop / Operating Location',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    prefixIcon: const Icon(Icons.location_on_outlined),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: craftStoryCtrl,
-                  maxLines: 3,
-                  decoration: InputDecoration(
-                    labelText: 'Artisan Story / Craft Heritage',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    prefixIcon: const Icon(Icons.history_edu_outlined),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    onPressed: isSaving
-                        ? null
-                        : () async {
-                            final sName = storeNameCtrl.text.trim();
-                            if (sName.isEmpty) return;
-                            setModalState(() => isSaving = true);
-                            try {
-                              await ref.read(authProvider.notifier).updateSellerProfile(
-                                storeName: sName,
-                                avatarUrl: avatarUrlCtrl.text.trim(),
-                                tagline: taglineCtrl.text.trim(),
-                                location: locationCtrl.text.trim(),
-                                craftStory: craftStoryCtrl.text.trim(),
-                              );
-                              if (modalCtx.mounted) Navigator.pop(modalCtx);
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Store profile updated successfully! ✓'),
-                                    backgroundColor: AppColors.success,
-                                  ),
-                                );
-                              }
-                            } catch (e) {
-                              setModalState(() => isSaving = false);
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Failed to update: $e'),
-                                    backgroundColor: AppColors.error,
-                                  ),
-                                );
-                              }
-                            }
-                          },
-                    child: isSaving
-                        ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                          )
-                        : Text(
-                            'Save Store Profile',
-                            style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: Colors.white),
-                          ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => EditStoreProfileScreen(seller: seller),
       ),
     );
   }

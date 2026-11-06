@@ -77,7 +77,7 @@ class ProductsNotifier extends StateNotifier<AsyncValue<List<Product>>> {
       try {
         dynamic query = SupabaseService.client
             .from('products')
-            .select('*, product_images(url, sort_order), sellers(store_name, location, is_verified)');
+            .select('*, product_images(url, sort_order), sellers(id, store_name, location, is_verified, phone_number, upi_id, users(full_name, avatar_url, phone))');
         if (_filter.categoryId != null) {
           query = query.eq('category_id', _filter.categoryId!);
         }
@@ -128,7 +128,7 @@ final featuredProductsProvider = FutureProvider<List<Product>>((ref) async {
   try {
     final res = await SupabaseService.client
         .from('products')
-        .select('*, product_images(url, sort_order), sellers(store_name, location, is_verified)')
+        .select('*, product_images(url, sort_order), sellers(id, store_name, location, is_verified, phone_number, upi_id, users(full_name, avatar_url, phone))')
         .eq('is_featured', true)
         .limit(10);
     if (res is List && res.isNotEmpty) {
@@ -153,7 +153,7 @@ final productDetailProvider = FutureProvider.family<Product?, String>((ref, id) 
   try {
     final res = await SupabaseService.client
         .from('products')
-        .select('*, product_images(url, sort_order), sellers(store_name, location, is_verified)')
+        .select('*, product_images(url, sort_order), sellers(id, store_name, location, is_verified, phone_number, upi_id, users(full_name, avatar_url, phone))')
         .eq('id', id)
         .maybeSingle();
     if (res != null) {
@@ -182,7 +182,7 @@ final allSellersProvider = FutureProvider<List<Seller>>((ref) async {
   try {
     final res = await SupabaseService.client
         .from('sellers')
-        .select('*, users(full_name, avatar_url)')
+        .select('*, users(full_name, avatar_url, phone)')
         .order('rating', ascending: false);
     if (res is List) {
       return (res as List).map((e) => Seller.fromJson(e as Map<String, dynamic>)).toList();
@@ -203,7 +203,7 @@ final featuredSellersProvider = FutureProvider<List<Seller>>((ref) async {
   try {
     final res = await SupabaseService.client
         .from('sellers')
-        .select('*, users(full_name, avatar_url)')
+        .select('*, users(full_name, avatar_url, phone)')
         .eq('is_featured', true)
         .order('rating', ascending: false);
     if (res is List && (res as List).isNotEmpty) {
@@ -226,7 +226,7 @@ final sellerDetailProvider = FutureProvider.family<Seller?, String>((ref, id) as
   try {
     final res = await SupabaseService.client
         .from('sellers')
-        .select('*, users(full_name, avatar_url)')
+        .select('*, users(full_name, avatar_url, phone)')
         .eq('id', id)
         .maybeSingle();
     if (res != null) {
@@ -252,7 +252,7 @@ final sellerProductsProvider = FutureProvider.family<List<Product>, String>((ref
   try {
     final res = await SupabaseService.client
         .from('products')
-        .select('*, product_images(url, sort_order), sellers(store_name, location, is_verified)')
+        .select('*, product_images(url, sort_order), sellers(id, store_name, location, is_verified, phone_number, upi_id, users(full_name, avatar_url, phone))')
         .eq('seller_id', sellerId)
         .order('created_at', ascending: false);
     if (res is List) {
